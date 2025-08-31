@@ -1,0 +1,57 @@
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  MinLength,
+} from 'class-validator';
+
+export class CreateUserDto {
+  @IsString()
+  @MinLength(3)
+  names: string;
+
+  @IsString()
+  @MinLength(3)
+  lastNames: string;
+
+  @IsInt()
+  documentTypeId: number;
+
+  @IsString()
+  @MinLength(5)
+  documentNumber: string;
+
+  @IsString()
+  @MinLength(7)
+  phone: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsOptional()
+  @IsInt()
+  originCountry: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(10)
+  address: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isVerified?: boolean;
+
+  @IsInt()
+  roleId: number;
+}

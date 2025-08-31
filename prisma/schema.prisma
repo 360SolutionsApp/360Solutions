@@ -1,0 +1,103 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  password String?
+
+  isActive   Boolean @default(true)
+  isVerified Boolean @default(false)
+
+  role   Role @relation(fields: [roleId], references: [id])
+  roleId Int
+
+  // Relaciones 1:1 corregidas
+  userDetail       UserDetail?       @relation("UserToUserDetail")
+  userVerification UserVerification? @relation("UserToUserVerification")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserDetail {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
+
+  names                  String?
+  lastNames              String?
+  phone                  String?
+  originCountry          Int?
+  address                String?
+  birthDate              DateTime?
+  documentTypeId         Int?
+  documentNumber         String?   @unique
+  profilePictureUrl      String?
+  attachedDocumentUrl    String?
+  attachedCertificateUrl String?
+
+  // Relación con DocumentType
+  documentType DocumentType? @relation(fields: [documentTypeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserVerification {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation("UserToUserVerification", fields: [userId], references: [id], onDelete: Cascade)
+
+  verificationCode           String?
+  verificationCodeExpiry     DateTime?
+  tokenToResetPassword       String?
+  tokenToResetPasswordExpiry DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DocumentType {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  // Relación con UserDetail (no con User directamente)
+  userDetails UserDetail[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Role {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Assignment {
+  id          Int    @id @default(autoincrement())
+  title       String
+  costPerHour Int    @default(0)
+  discount    Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
