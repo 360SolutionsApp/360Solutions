@@ -8,7 +8,13 @@ import { AuthModule } from './auth/auth.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, RolesModule, DocumentTypesModule, AssignmentsModule],
+  imports: [
+    AuthModule,
+    UsersModule,
+    RolesModule,
+    DocumentTypesModule,
+    AssignmentsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

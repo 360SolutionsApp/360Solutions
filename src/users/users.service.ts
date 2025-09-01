@@ -10,7 +10,6 @@ import { UsersCodeVerifyService } from './usersCodeVerify.service';
 import { paginate } from 'src/helpers/pagination.helper';
 import { ResponseUserDto } from './dto/response-user.dto';
 import { PaginationDto } from 'src/helpers/pagination.dto';
-import { Prisma } from 'generated/prisma';
 
 @Injectable()
 export class UsersService {
