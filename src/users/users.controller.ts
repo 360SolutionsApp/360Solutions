@@ -85,7 +85,11 @@ export class UsersController {
   async attachmentUser(
     @Body('userId', ParseIntPipe) userId: number,
     @Body('type')
-    type: 'profilePicture' | 'attachedDocument' | 'attachedCertificate',
+    type:
+      | 'profilePicture'
+      | 'attachedDocument'
+      | 'socialSecurity'
+      | 'applicationCv',
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     // `files` es el array de blobs subidos desde form-data con la clave `files`
