@@ -5,12 +5,19 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from 'src/prisma.service';
 
-type AttachmentType = 'profilePicture' | 'attachedDocument' | 'attachedCertificate';
+// 🔹 Nuevo tipo de adjuntos
+type AttachmentType =
+  | 'profilePicture'
+  | 'attachedDocument'
+  | 'socialSecurity'
+  | 'applicationCv';
 
+// 🔹 Mapeo de alias -> columna en la base de datos
 const aliasToColumn: Record<AttachmentType, string> = {
   profilePicture: 'profilePictureUrl',
   attachedDocument: 'attachedDocumentUrl',
-  attachedCertificate: 'attachedCertificateUrl',
+  socialSecurity: 'socialSecurityUrl',
+  applicationCv: 'applicationCvUrl',
 };
 
 @Injectable()
@@ -42,7 +49,7 @@ export class UsersAttachmentService {
     for (const file of files) {
       const alias = file.originalname.split('_')[0] as AttachmentType;
 
-      if (!['profilePicture', 'attachedDocument', 'attachedCertificate'].includes(alias)) {
+      if (!Object.keys(aliasToColumn).includes(alias)) {
         this.logger.warn(`⚠️ Alias inválido recibido: ${alias}, se ignora este archivo`);
         continue;
       }

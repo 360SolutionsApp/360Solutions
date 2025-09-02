@@ -22,23 +22,24 @@ model User {
 }
 
 model UserDetail {
-  id                     Int           @id @default(autoincrement())
-  userId                 Int           @unique
-  names                  String?
-  lastNames              String?
-  phone                  String?
-  currentCityId            Int?
-  address                String?
-  birthDate              DateTime?
-  documentTypeId         Int?
-  documentNumber         String?       @unique
-  profilePictureUrl      String?
-  attachedDocumentUrl    String?
-  attachedCertificateUrl String?
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-  documentType           DocumentType? @relation(fields: [documentTypeId], references: [id])
-  user                   User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
+  id                  Int           @id @default(autoincrement())
+  userId              Int           @unique
+  names               String?
+  lastNames           String?
+  phone               String?
+  currentCityId       Int?
+  address             String?
+  birthDate           DateTime?
+  documentTypeId      Int?
+  documentNumber      String?       @unique
+  profilePictureUrl   String?
+  attachedDocumentUrl String?
+  socialSecurityUrl   String?
+  applicationCvUrl    String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  documentType        DocumentType? @relation(fields: [documentTypeId], references: [id])
+  user                User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserVerification {
