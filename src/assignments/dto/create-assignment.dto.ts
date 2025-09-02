@@ -1,13 +1,14 @@
 /* eslint-disable prettier/prettier */
-import { IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateAssignmentDto {
   @IsString()
   title: string;
 
   @IsString()
-  costPerHour: number;
+  @IsOptional()
+  costPerHour?: number;
 
   @IsString()
-  discount: number;
+  assignmentType: number;
 }

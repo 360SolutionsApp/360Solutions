@@ -71,10 +71,10 @@ model Role {
 }
 
 model Assignment {
-  id          Int      @id @default(autoincrement())
-  title       String
-  costPerHour Int      @default(0)
-  discount    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  title          String
+  assignmentType Int
+  costPerHour    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

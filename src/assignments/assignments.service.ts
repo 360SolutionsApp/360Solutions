@@ -10,13 +10,29 @@ export class AssignmentsService {
   async create(createAssignmentDto: CreateAssignmentDto[]) {
     for (let i = 0; i < createAssignmentDto.length; i++) {
       const element = createAssignmentDto[i];
-      await this.prisma.assignment.create({
-        data: {
-          title: element.title,
-          costPerHour: element.costPerHour,
-          discount: element.discount,
-        },
+
+      // Verificar si ya existe un assignment con el mismo title
+      const exists = await this.prisma.assignment.findFirst({
+        where: { title: element.title },
       });
+
+      try {
+        if (!exists) {
+          await this.prisma.assignment.create({
+            data: {
+              title: element.title,
+              costPerHour: element.costPerHour,
+              assignmentType: element.assignmentType,
+            },
+          });
+        }
+        // Si existe, simplemente continúa con el siguiente
+      } catch (error) {
+        console.error(`Error creating assignment with title ${element.title}:`, error);
+      }
+
+
+
     }
   }
 
@@ -36,7 +52,7 @@ export class AssignmentsService {
       data: {
         title: updateAssignmentDto.title,
         costPerHour: updateAssignmentDto.costPerHour,
-        discount: updateAssignmentDto.discount,
+        assignmentType: updateAssignmentDto.assignmentType,
       },
     });
   }
