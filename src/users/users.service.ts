@@ -45,7 +45,7 @@ export class UsersService {
           names: createUserDto.names,
           lastNames: createUserDto.lastNames,
           phone: createUserDto.phone,
-          originCountry: createUserDto.originCountry,
+          currentCityId: createUserDto.currentCityId,
           address: createUserDto.address,
           documentTypeId: createUserDto.documentTypeId,
           documentNumber: createUserDto.documentNumber,
@@ -219,8 +219,8 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado.');
     }
 
-    return await this.prismaService.user.update({
-      where: { email: email },
+    return await this.prismaService.userDetail.update({
+      where: { userId: user.id },
       data: updateUserDto,
     });
   }

@@ -58,7 +58,7 @@ export class ResponseUserDto {
     @Expose()
     @IsString()
     @IsOptional()
-    country?: string;
+    currentCityId?: string;
 
     @Expose()
     @IsString()

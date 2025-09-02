@@ -27,7 +27,7 @@ model UserDetail {
   names                  String?
   lastNames              String?
   phone                  String?
-  originCountry          Int?
+  currentCityId            Int?
   address                String?
   birthDate              DateTime?
   documentTypeId         Int?
