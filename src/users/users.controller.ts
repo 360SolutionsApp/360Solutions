@@ -84,15 +84,8 @@ export class UsersController {
   @UseInterceptors(FilesInterceptor('files'))
   async attachmentUser(
     @Body('userId', ParseIntPipe) userId: number,
-    @Body('type')
-    type:
-      | 'profilePicture'
-      | 'attachedDocument'
-      | 'socialSecurity'
-      | 'applicationCv',
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    // `files` es el array de blobs subidos desde form-data con la clave `files`
     return this.usersAttachmentService.uploadMultipleAttachments(files, userId);
   }
 }

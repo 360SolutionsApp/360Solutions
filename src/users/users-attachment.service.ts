@@ -5,14 +5,8 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from 'src/prisma.service';
 
-// 🔹 Nuevo tipo de adjuntos
-type AttachmentType =
-  | 'profilePicture'
-  | 'attachedDocument'
-  | 'socialSecurity'
-  | 'applicationCv';
+type AttachmentType = 'profilePicture' | 'attachedDocument' | 'socialSecurity' | 'applicationCv';
 
-// 🔹 Mapeo de alias -> columna en la base de datos
 const aliasToColumn: Record<AttachmentType, string> = {
   profilePicture: 'profilePictureUrl',
   attachedDocument: 'attachedDocumentUrl',
