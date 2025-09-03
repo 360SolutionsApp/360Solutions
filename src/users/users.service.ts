@@ -182,12 +182,30 @@ export class UsersService {
     }
   }
 
-  async findAll(params: PaginationDto) {
-    const result = await paginate(this.prismaService.user, params, {
-      searchFields: ['email'],
-      relationSearch: {
-        userDetail: ['names', 'lastNames', 'documentNumber'],
-      },
+  async findAll(params: PaginationDto, roleId: number) {
+    console.log('Role ID del usuario autenticado:', roleId);
+
+    // 🔹 Definir condición de rol
+    const whereCondition =
+      roleId === 1
+        ? {} // Super Admin → ve todos
+        : { roleId: 5 }; // Otros → solo colaboradores
+
+    // 🔹 Calcular paginación
+    const page = params.page ? Number(params.page) : 1;
+    const limit = params.limit ? Number(params.limit) : 10;
+    const skip = (page - 1) * limit;
+
+    // 🔹 Total de registros
+    const total = await this.prismaService.user.count({
+      where: whereCondition,
+    });
+
+    // 🔹 Obtener registros
+    const data = await this.prismaService.user.findMany({
+      where: whereCondition,
+      skip,
+      take: limit, // ✅ ahora es un número
       include: {
         role: true,
         userDetail: {
@@ -196,18 +214,54 @@ export class UsersService {
           },
         },
       },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
 
-    // 🔒 Excluir password manualmente
-    result.data = result.data.map(({ password, ...user }: any) => user);
+    // 🔒 Excluir password
+    const safeData = data.map(({ password, ...user }: any) => user);
 
-    return result;
+    return {
+      data: safeData,
+      meta: {
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 
+
+
   async findOne(id: number) {
-    return await this.prismaService.user.findUnique({
+    const user = await this.prismaService.user.findUnique({
       where: { id: id },
     });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado.');
+    }
+
+    const userDetail = await this.prismaService.userDetail.findUnique({
+      where: { userId: id },
+      include: { documentType: true },
+    });
+
+    if (!userDetail) {
+      throw new NotFoundException('Detalles del usuario no encontrados.');
+    }
+
+    // Combinar datos de user y userDetail
+    const combinedUser = {
+      ...user,
+      ...userDetail,
+    };
+
+    // Excluir password
+    const safeUser = { ...combinedUser, password: undefined };
+
+    return safeUser;
   }
 
   async update(email: string, updateUserDto: UpdateUserDto) {

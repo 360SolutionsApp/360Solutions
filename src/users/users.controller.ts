@@ -10,6 +10,8 @@ import {
   UseGuards,
   Query,
   ParseIntPipe,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -35,8 +37,16 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async findAll(@Query() query: PaginationDto) {
-    return this.usersService.findAll(query);
+  async findAll(@Query() query: PaginationDto, @Req() req) {
+    console.log('Usuario autenticado:', req.user.Rol[0].id);
+
+    const roleId = req.user.Rol[0]?.id; // ✅ acceso directo
+
+    if (!roleId) {
+      throw new UnauthorizedException('No se pudo obtener el rol del usuario');
+    }
+
+    return this.usersService.findAll(query, roleId);
   }
 
   @UseGuards(JwtAuthGuard)
