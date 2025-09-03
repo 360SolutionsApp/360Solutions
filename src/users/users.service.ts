@@ -279,8 +279,8 @@ export class UsersService {
     });
   }
 
-  remove(id: number) {
-    const user = this.prismaService.user.findUnique({
+  async remove(id: number) {
+    const user = await this.prismaService.user.findUnique({
       where: { id: id },
     });
 
@@ -288,8 +288,14 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado.');
     }
 
-    return this.prismaService.user.delete({
+    await this.prismaService.userDetail.delete({
+      where: { userId: id },
+    });
+
+    await this.prismaService.user.delete({
       where: { id: id },
     });
+
+    return 'Usuario eliminado con éxito';
   }
 }
