@@ -15,8 +15,8 @@ async function bootstrap() {
       'capacitor://localhost',
       'http://192.168.1.13:8100',
       'https://three60solutions.onrender.com',
-      '360-solution-front-dpslzfye8-360-solutions-app.vercel.app',
-      '360-solution-front.vercel.app',
+      'https://360-solution-front.vercel.app/login?returnUrl=%2Flayout%2Fcolaborator',
+      'https://360-solution-front.vercel.app',
     ], // O usa '*' para desarrollo (no recomendado para producción)
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
