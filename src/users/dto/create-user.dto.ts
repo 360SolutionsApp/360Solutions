@@ -27,6 +27,9 @@ export class CreateUserDto {
   @MinLength(7)
   phone: string;
 
+  @IsInt()
+  assignamentId: number;
+
   @IsEmail()
   email: string;
 

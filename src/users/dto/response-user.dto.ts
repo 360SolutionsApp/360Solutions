@@ -9,6 +9,7 @@ import {
     ValidateNested,
     IsNumber,
 } from "class-validator";
+import { CreateAssignmentDto } from 'src/assignments/dto/create-assignment.dto';
 import { CreateDocumentTypeDto } from "src/document-types/dto/create-document-type.dto";
 import { CreateRoleDto } from "src/roles/dto/create-role.dto";
 
@@ -43,6 +44,12 @@ export class ResponseUserDto {
     @IsNumber()
     @IsOptional()
     documentTypeId?: number;
+
+    @Expose()
+    @ValidateNested()
+    @Type(() => CreateAssignmentDto)
+    @IsOptional()
+    Assignment?: CreateAssignmentDto;
 
     @Expose()
     @ValidateNested()

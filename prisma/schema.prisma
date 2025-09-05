@@ -27,6 +27,8 @@ model UserDetail {
   names               String?
   lastNames           String?
   phone               String?
+  assignamentId       Int?
+  assignament         Assignment?   @relation(fields: [assignamentId], references: [id])
   currentCityId       Int?
   address             String?
   birthDate           DateTime?
@@ -71,10 +73,11 @@ model Role {
 }
 
 model Assignment {
-  id             Int      @id @default(autoincrement())
+  id             Int          @id @default(autoincrement())
   title          String
   assignmentType Int
-  costPerHour    Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  costPerHour    Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  UserDetail     UserDetail[]
 }

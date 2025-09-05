@@ -1,14 +1,12 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-require-imports */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { UsersCodeVerifyService } from './usersCodeVerify.service';
-import { paginate } from 'src/helpers/pagination.helper';
-import { ResponseUserDto } from './dto/response-user.dto';
 import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Injectable()
@@ -19,68 +17,65 @@ export class UsersService {
   ) { }
 
   async create(createUserDto: CreateUserDto) {
+    // 1. Verificar si el correo ya existe
     const verifyEmail = await this.prismaService.user.findUnique({
       where: { email: createUserDto.email },
     });
 
     if (verifyEmail) {
-      return 'El correo ya se encuentra registrado';
+      throw new ConflictException('El correo ya se encuentra registrado');
     }
 
     try {
-      // 1. Crear usuario solo con email + rol
+      // 2. Crear usuario con detalle en una sola transacción (anidado)
       const user = await this.prismaService.user.create({
         data: {
           email: createUserDto.email,
           role: {
             connect: { id: createUserDto.roleId },
           },
+          userDetail: {
+            create: {
+              names: createUserDto.names,
+              lastNames: createUserDto.lastNames,
+              phone: createUserDto.phone,
+              currentCityId: createUserDto.currentCityId,
+              assignamentId: createUserDto.assignamentId,
+              address: createUserDto.address,
+              documentTypeId: createUserDto.documentTypeId,
+              documentNumber: createUserDto.documentNumber,
+            },
+          },
         },
-      });
-
-      // 2. Crear detalles del usuario vinculados al `userId`
-      await this.prismaService.userDetail.create({
-        data: {
-          userId: user.id,
-          names: createUserDto.names,
-          lastNames: createUserDto.lastNames,
-          phone: createUserDto.phone,
-          currentCityId: createUserDto.currentCityId,
-          address: createUserDto.address,
-          documentTypeId: createUserDto.documentTypeId,
-          documentNumber: createUserDto.documentNumber,
+        include: {
+          role: true,
+          userDetail: {
+            include: {
+              documentType: true,
+              assignament: true,
+            },
+          },
         },
       });
 
       // 3. Generar código de verificación
       await this.usersCodeVerifyService.createCode(user.id);
 
-      // 4. Traer usuario con sus relaciones (rol + detalle + tipo de documento)
-      const userWithRelations = await this.prismaService.user.findUnique({
-        where: { id: user.id },
-        include: {
-          role: true,
-          userDetail: {
-            include: {
-              documentType: true,
-            },
-          },
-        },
-      });
-
+      // 4. Retornar solo la información necesaria
       return {
-        id: userWithRelations.id,
-        email: userWithRelations.email,
-        role: userWithRelations.role.name, // nombre del rol
-        names: userWithRelations.userDetail?.names,
-        lastNames: userWithRelations.userDetail?.lastNames,
-        phone: userWithRelations.userDetail?.phone,
-        documentType: userWithRelations.userDetail?.documentType?.name, // nombre del documento
-        documentNumber: userWithRelations.userDetail?.documentNumber,
+        id: user.id,
+        email: user.email,
+        role: user.role.name,
+        names: user.userDetail?.names,
+        lastNames: user.userDetail?.lastNames,
+        phone: user.userDetail?.phone,
+        documentType: user.userDetail?.documentType?.name,
+        documentNumber: user.userDetail?.documentNumber,
+        assignament: user.userDetail?.assignament?.title,
       };
     } catch (error) {
       console.error('Error al crear el usuario:', error);
-      throw new NotFoundException('No se pudo crear el usuario');
+      throw new InternalServerErrorException('No se pudo crear el usuario');
     }
   }
 
@@ -232,8 +227,6 @@ export class UsersService {
     };
   }
 
-
-
   async findOne(id: number) {
     const user = await this.prismaService.user.findUnique({
       where: { id: id },
@@ -245,7 +238,7 @@ export class UsersService {
 
     const userDetail = await this.prismaService.userDetail.findUnique({
       where: { userId: id },
-      include: { documentType: true },
+      include: { documentType: true, assignament: true },
     });
 
     if (!userDetail) {
