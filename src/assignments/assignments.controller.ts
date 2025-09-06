@@ -1,9 +1,10 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { AssignmentsService } from './assignments.service';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { JwtAuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Controller('assignments')
 export class AssignmentsController {
@@ -19,6 +20,12 @@ export class AssignmentsController {
   @Get()
   findAll() {
     return this.assignmentsService.findAll();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('paginated')
+  findAllPaginated(@Query() params: PaginationDto) {
+    return this.assignmentsService.findAllPaginated(params);
   }
 
   @UseGuards(JwtAuthGuard)

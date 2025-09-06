@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from 'src/prisma.service';
+import { DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
 type AttachmentType = 'profilePicture' | 'attachedDocument' | 'socialSecurity' | 'applicationCv';
 
@@ -117,5 +118,48 @@ export class UsersAttachmentService {
     }
 
     return uploadedUrls as Record<AttachmentType, string>;
+  }
+
+  /**
+ * 📌 Eliminar múltiples archivos en S3 a partir de sus URLs
+ */
+  async deleteFilesFromS3(fileUrls: string[]): Promise<void> {
+    const bucket = this.configService.get<string>('AWS_S3_BUCKET');
+
+    if (!fileUrls || fileUrls.length === 0) {
+      this.logger.warn(`⚠️ No se recibieron URLs para eliminar`);
+      return;
+    }
+
+    // 🔹 Extraer los keys de las URLs
+    const objectsToDelete = fileUrls
+      .map((url) => {
+        if (url && url.includes('.amazonaws.com/')) {
+          const key = url.split('.amazonaws.com/')[1];
+          return key ? { Key: key } : null;
+        }
+        return null;
+      })
+      .filter((obj) => obj !== null);
+
+    if (objectsToDelete.length === 0) {
+      this.logger.warn(`⚠️ Ninguna URL válida encontrada`);
+      return;
+    }
+
+    try {
+      // 🔹 Eliminar múltiples objetos en una sola petición
+      await this.s3Client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: objectsToDelete as { Key: string }[] },
+        }),
+      );
+
+      this.logger.log(`🗑️ Archivos eliminados correctamente: ${objectsToDelete.length}`);
+    } catch (err: any) {
+      this.logger.error(`❌ Error eliminando archivos de S3: ${err.message}`, err.stack);
+      throw err;
+    }
   }
 }

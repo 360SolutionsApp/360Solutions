@@ -8,12 +8,14 @@ import { PrismaService } from 'src/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import { UsersCodeVerifyService } from './usersCodeVerify.service';
 import { PaginationDto } from 'src/helpers/pagination.dto';
+import { UsersAttachmentService } from './users-attachment.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly usersCodeVerifyService: UsersCodeVerifyService,
+    private readonly usersAttachmentService: UsersAttachmentService
   ) { }
 
   async create(createUserDto: CreateUserDto) {
@@ -331,6 +333,24 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado.');
     }
 
+    const getDetailUser = await this.prismaService.userDetail.findUnique({
+      where: { userId: id },
+    })
+
+    const urlsAttachments = [
+      getDetailUser.profilePictureUrl,
+      getDetailUser.attachedDocumentUrl,
+      getDetailUser.socialSecurityUrl,
+      getDetailUser.applicationCvUrl
+    ].filter(url => url != null);
+
+    console.log('Urls de archivos a eliminar:', urlsAttachments);
+
+    if(urlsAttachments.length !== 0) {
+      const removeAttachment = await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
+      console.log('Archivos eliminados:', removeAttachment);
+    }    
+
     await this.prismaService.userDetail.delete({
       where: { userId: id },
     });
@@ -340,5 +360,16 @@ export class UsersService {
     });
 
     return 'Usuario eliminado con éxito';
+
+/*
+    await this.prismaService.userDetail.delete({
+      where: { userId: id },
+    });
+
+    await this.prismaService.user.delete({
+      where: { id: id },
+    });
+
+    return 'Usuario eliminado con éxito';*/
   }
 }

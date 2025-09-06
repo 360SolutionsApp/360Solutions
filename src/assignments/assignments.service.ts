@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateAssignmentDto } from './dto/create-assignment.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { PrismaService } from 'src/prisma.service';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Injectable()
 export class AssignmentsService {
@@ -38,6 +39,18 @@ export class AssignmentsService {
 
   async findAll() {
     return await this.prisma.assignment.findMany();
+  }
+
+  async findAllPaginated(params: PaginationDto) {
+    const page = params.page ? Number(params.page) : 1;
+    const limit = params.limit ? Number(params.limit) : 10;
+    const skip = (page - 1) * limit;
+    const total = await this.prisma.assignment.count();
+    const data = await this.prisma.assignment.findMany({
+      skip,
+      take: limit,
+    });
+    return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
