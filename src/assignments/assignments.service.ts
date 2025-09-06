@@ -28,8 +28,11 @@ export class AssignmentsService {
           });
         }
         // Si existe, simplemente continúa con el siguiente
+
+        return { message: 'Assignment created successfully' };
       } catch (error) {
         console.error(`Error creating assignment with title ${element.title}:`, error);
+        return { message: 'Error creating assignment' };
       }
 
 
