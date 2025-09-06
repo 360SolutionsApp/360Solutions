@@ -182,9 +182,9 @@ export class UsersService {
 
     // 🔹 Definir condición de rol
     const whereCondition =
-      roleId === 1
-        ? {} // Super Admin → ve todos
-        : { roleId: 5 }; // Otros → solo colaboradores
+      roleId === 1 || roleId === 2
+      ? {} // Super Admin y Admin → ven todos
+      : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Calcular paginación
     const page = params.page ? Number(params.page) : 1;
@@ -223,6 +223,56 @@ export class UsersService {
         total,
         page,
         lastPage: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findAllInternalUsers(params: PaginationDto, roleId: number) {
+    console.log('Role ID del usuario autenticado:', roleId);
+
+    // 🔹 Definir condición de rol
+    const whereCondition =
+      roleId === 1
+      ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1 y 5
+      : { roleId: 5 }; // Otros → solo colaboradores
+
+    // 🔹 Calcular paginación
+    const page = params.page ? Number(params.page) : 1;
+    const limit = params.limit ? Number(params.limit) : 10;
+    const skip = (page - 1) * limit;
+
+    // 🔹 Total de registros
+    const total = await this.prismaService.user.count({
+      where: whereCondition,
+    });
+
+    // 🔹 Obtener registros
+    const data = await this.prismaService.user.findMany({
+      where: whereCondition,
+      skip,
+      take: limit,
+      include: {
+      role: true,
+      userDetail: {
+        include: {
+        documentType: true,
+        },
+      },
+      },
+      orderBy: {
+      createdAt: 'desc',
+      },
+    });
+
+    // 🔒 Excluir password
+    const safeData = data.map(({ password, ...user }: any) => user);
+
+    return {
+      data: safeData,
+      meta: {
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
       },
     };
   }

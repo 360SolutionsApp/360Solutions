@@ -50,6 +50,20 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('findAllInternalUsers')
+  async findAllInternalUsers(@Query() query: PaginationDto, @Req() req) {
+    console.log('Usuario autenticado:', req.user.Rol[0].id);
+
+    const roleId = req.user.Rol[0]?.id; // ✅ acceso directo
+
+    if (!roleId) {
+      throw new UnauthorizedException('No se pudo obtener el rol del usuario');
+    }
+
+    return this.usersService.findAllInternalUsers(query, roleId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(+id);
