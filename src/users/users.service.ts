@@ -179,7 +179,7 @@ export class UsersService {
     }
   }
 
-  async findAll(params: PaginationDto, roleId: number) {
+  async findAll(params: PaginationDto, getUserId: number, roleId: number) {
     console.log('Role ID del usuario autenticado:', roleId);
 
     // 🔹 Definir condición de rol
@@ -219,8 +219,12 @@ export class UsersService {
     // 🔒 Excluir password
     const safeData = data.map(({ password, ...user }: any) => user);
 
+    // excluir el usuario autenticado
+    const userId = getUserId;
+    const filteredData = safeData.filter((user: any) => user.id !== userId);
+
     return {
-      data: safeData,
+      data: filteredData,
       meta: {
         total,
         page,
@@ -229,7 +233,7 @@ export class UsersService {
     };
   }
 
-  async findAllInternalUsers(params: PaginationDto, roleId: number) {
+  async findAllInternalUsers(params: PaginationDto, userId: number, roleId: number) {
     console.log('Role ID del usuario autenticado:', roleId);
 
     // 🔹 Definir condición de rol
@@ -269,8 +273,11 @@ export class UsersService {
     // 🔒 Excluir password
     const safeData = data.map(({ password, ...user }: any) => user);
 
+    // excluir el usuario autenticado
+    const filteredData = safeData.filter((user: any) => user.id !== userId);
+
     return {
-      data: safeData,
+      data: filteredData,
       meta: {
       total,
       page,
