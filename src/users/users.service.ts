@@ -42,10 +42,15 @@ export class UsersService {
               lastNames: createUserDto.lastNames,
               phone: createUserDto.phone,
               currentCityId: createUserDto.currentCityId,
-              assignamentId: createUserDto.assignamentId,
               address: createUserDto.address,
               documentTypeId: createUserDto.documentTypeId,
               documentNumber: createUserDto.documentNumber,
+              assignments: createUserDto.assignmentIds?.length
+                ? {
+                  connect: createUserDto.assignmentIds.map((id) => ({ id })),
+                }
+                : undefined, // si no vienen asignaciones, no conecta nada
+              coustPerHour: createUserDto.coustPerHour,
             },
           },
         },
@@ -54,7 +59,7 @@ export class UsersService {
           userDetail: {
             include: {
               documentType: true,
-              assignament: true,
+              assignments: true, // incluye todas las asignaciones
             },
           },
         },
@@ -73,7 +78,8 @@ export class UsersService {
         phone: user.userDetail?.phone,
         documentType: user.userDetail?.documentType?.name,
         documentNumber: user.userDetail?.documentNumber,
-        assignament: user.userDetail?.assignament?.title,
+        assignments: user.userDetail?.assignments.map((a) => a.title) || [],
+        coustPerHour: user.userDetail?.coustPerHour,
       };
     } catch (error) {
       console.error('Error al crear el usuario:', error);
@@ -185,8 +191,8 @@ export class UsersService {
     // 🔹 Definir condición de rol
     const whereCondition =
       roleId === 1 || roleId === 2
-      ? {} // Super Admin y Admin → ven todos
-      : { roleId: 5 }; // Otros → solo colaboradores
+        ? {} // Super Admin y Admin → ven todos
+        : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Calcular paginación
     const page = params.page ? Number(params.page) : 1;
@@ -208,6 +214,7 @@ export class UsersService {
         userDetail: {
           include: {
             documentType: true,
+            assignments: true,
           },
         },
       },
@@ -239,8 +246,8 @@ export class UsersService {
     // 🔹 Definir condición de rol
     const whereCondition =
       roleId === 1
-      ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1 y 5
-      : { roleId: 5 }; // Otros → solo colaboradores
+        ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1 y 5
+        : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Calcular paginación
     const page = params.page ? Number(params.page) : 1;
@@ -258,15 +265,15 @@ export class UsersService {
       skip,
       take: limit,
       include: {
-      role: true,
-      userDetail: {
-        include: {
-        documentType: true,
+        role: true,
+        userDetail: {
+          include: {
+            documentType: true,
+          },
         },
       },
-      },
       orderBy: {
-      createdAt: 'desc',
+        createdAt: 'desc',
       },
     });
 
@@ -279,16 +286,16 @@ export class UsersService {
     return {
       data: filteredData,
       meta: {
-      total,
-      page,
-      lastPage: Math.ceil(total / limit),
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
       },
     };
   }
 
   async findOne(id: number) {
     const user = await this.prismaService.user.findUnique({
-      where: { id: id },
+      where: { id },
     });
 
     if (!user) {
@@ -297,7 +304,10 @@ export class UsersService {
 
     const userDetail = await this.prismaService.userDetail.findUnique({
       where: { userId: id },
-      include: { documentType: true, assignament: true },
+      include: {
+        documentType: true,
+        assignments: true,
+      },
     });
 
     if (!userDetail) {
@@ -311,14 +321,14 @@ export class UsersService {
     };
 
     // Excluir password
-    const safeUser = { ...combinedUser, password: undefined };
+    const { password, ...safeUser } = combinedUser;
 
     return safeUser;
   }
 
   async update(email: string, updateUserDto: UpdateUserDto) {
     const user = await this.prismaService.user.findUnique({
-      where: { email: email },
+      where: { email },
     });
 
     if (!user) {
@@ -327,13 +337,31 @@ export class UsersService {
 
     return await this.prismaService.userDetail.update({
       where: { userId: user.id },
-      data: updateUserDto,
+      data: {
+        names: updateUserDto.names,
+        lastNames: updateUserDto.lastNames,
+        phone: updateUserDto.phone,
+        currentCityId: updateUserDto.currentCityId,
+        address: updateUserDto.address,
+        documentNumber: updateUserDto.documentNumber,
+        coustPerHour: updateUserDto.coustPerHour,
+        birthDate: updateUserDto.birthDate,
+        // 🔑 manejar las asignaciones
+        assignments: updateUserDto.assignmentIds
+          ? {
+            set: updateUserDto.assignmentIds.map(id => ({ id })),
+          }
+          : undefined,
+      },
+      include: {
+        assignments: true,
+      },
     });
   }
 
   async remove(id: number) {
     const user = await this.prismaService.user.findUnique({
-      where: { id: id },
+      where: { id },
     });
 
     if (!user) {
@@ -342,41 +370,50 @@ export class UsersService {
 
     const getDetailUser = await this.prismaService.userDetail.findUnique({
       where: { userId: id },
-    })
-
-    const urlsAttachments = [
-      getDetailUser.profilePictureUrl,
-      getDetailUser.attachedDocumentUrl,
-      getDetailUser.socialSecurityUrl,
-      getDetailUser.applicationCvUrl
-    ].filter(url => url != null);
-
-    console.log('Urls de archivos a eliminar:', urlsAttachments);
-
-    if(urlsAttachments.length !== 0) {
-      const removeAttachment = await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
-      console.log('Archivos eliminados:', removeAttachment);
-    }    
-
-    await this.prismaService.userDetail.delete({
-      where: { userId: id },
     });
 
-    await this.prismaService.user.delete({
-      where: { id: id },
-    });
+    if (!getDetailUser) {
+      throw new NotFoundException('Detalle de usuario no encontrado.');
+    }
 
-    return 'Usuario eliminado con éxito';
+    try {
+      // Eliminar archivos de S3 si existen
+      const urlsAttachments = [
+        getDetailUser.profilePictureUrl,
+        getDetailUser.attachedDocumentUrl,
+        getDetailUser.socialSecurityUrl,
+        getDetailUser.applicationCvUrl,
+      ].filter((url) => url != null);
 
-/*
-    await this.prismaService.userDetail.delete({
-      where: { userId: id },
-    });
+      if (urlsAttachments.length > 0) {
+        await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
+      }
 
-    await this.prismaService.user.delete({
-      where: { id: id },
-    });
+      // Desconectar las asignaciones antes de borrar el detalle
+      await this.prismaService.userDetail.update({
+        where: { userId: id },
+        data: {
+          assignments: {
+            set: [], // elimina todas las relaciones en _UserDetailAssignments
+          },
+        },
+      });
 
-    return 'Usuario eliminado con éxito';*/
+      // Eliminar el detalle del usuario
+      await this.prismaService.userDetail.delete({
+        where: { userId: id },
+      });
+
+      // Finalmente eliminar el usuario
+      await this.prismaService.user.delete({
+        where: { id },
+      });
+
+      return { message: 'Usuario eliminado correctamente.' };
+    } catch (error) {
+      console.error('Error al eliminar el usuario:', error);
+      throw new InternalServerErrorException('Error al eliminar el usuario.');
+    }
+
   }
 }

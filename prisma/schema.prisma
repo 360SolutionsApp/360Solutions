@@ -27,8 +27,6 @@ model UserDetail {
   names               String?
   lastNames           String?
   phone               String?
-  assignamentId       Int?
-  assignament         Assignment?   @relation(fields: [assignamentId], references: [id])
   currentCityId       Int?
   address             String?
   birthDate           DateTime?
@@ -42,6 +40,9 @@ model UserDetail {
   updatedAt           DateTime      @updatedAt
   documentType        DocumentType? @relation(fields: [documentTypeId], references: [id])
   user                User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
+  coustPerHour        Int?
+
+  assignments Assignment[] @relation("UserDetailAssignments")
 }
 
 model UserVerification {
@@ -79,5 +80,5 @@ model Assignment {
   costPerHour    Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
-  UserDetail     UserDetail[]
+  users          UserDetail[] @relation("UserDetailAssignments")
 }

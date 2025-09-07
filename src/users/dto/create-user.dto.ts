@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsEmail,
   IsString,
@@ -5,6 +6,8 @@ import {
   IsBoolean,
   IsInt,
   MinLength,
+  IsArray,
+  IsDate,
 } from 'class-validator';
 
 export class CreateUserDto {
@@ -16,6 +19,11 @@ export class CreateUserDto {
   @MinLength(3)
   lastNames: string;
 
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  birthDate?: Date;
+
   @IsInt()
   documentTypeId: number;
 
@@ -26,9 +34,6 @@ export class CreateUserDto {
   @IsString()
   @MinLength(7)
   phone: string;
-
-  @IsInt()
-  assignamentId: number;
 
   @IsEmail()
   email: string;
@@ -57,4 +62,13 @@ export class CreateUserDto {
 
   @IsInt()
   roleId: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  assignmentIds: number[];
+
+  @IsOptional()
+  @IsInt()
+  coustPerHour?: number;
 }

@@ -52,6 +52,9 @@ export class AssignmentsService {
     const data = await this.prisma.assignment.findMany({
       skip,
       take: limit,
+      orderBy: {
+        createdAt: 'desc',
+      }
     });
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }

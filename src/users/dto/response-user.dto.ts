@@ -46,10 +46,10 @@ export class ResponseUserDto {
     documentTypeId?: number;
 
     @Expose()
-    @ValidateNested()
+    @ValidateNested({ each: true })
     @Type(() => CreateAssignmentDto)
     @IsOptional()
-    Assignment?: CreateAssignmentDto;
+    Assignment?: CreateAssignmentDto[];
 
     @Expose()
     @ValidateNested()
