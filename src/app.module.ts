@@ -6,6 +6,7 @@ import { RolesModule } from './roles/roles.module';
 import { DocumentTypesModule } from './document-types/document-types.module';
 import { AuthModule } from './auth/auth.module';
 import { AssignmentsModule } from './assignments/assignments.module';
+import { ClientsModule } from './clients/clients.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AssignmentsModule } from './assignments/assignments.module';
     RolesModule,
     DocumentTypesModule,
     AssignmentsModule,
+    ClientsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
