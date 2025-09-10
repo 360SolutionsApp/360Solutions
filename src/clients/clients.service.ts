@@ -81,11 +81,18 @@ export class ClientsService {
 
   async findOne(id: number) {
     try {
-      await this.prisma.clientCompany.findUnique({
+      const client = await this.prisma.clientCompany.findUnique({
         where: {
           id: id
         }
       })
+
+      if (client) {
+        return client;
+      } else {
+        throw new Error("Client not found");
+      }
+
     } catch (error) {
       console.error("Error finding client:", error);
       // imprime el error para que lo peuda leer el frontend

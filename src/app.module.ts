@@ -7,6 +7,7 @@ import { DocumentTypesModule } from './document-types/document-types.module';
 import { AuthModule } from './auth/auth.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { ClientsModule } from './clients/clients.module';
+import { WorkOrdersModule } from './work-orders/work-orders.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ClientsModule } from './clients/clients.module';
     DocumentTypesModule,
     AssignmentsModule,
     ClientsModule,
+    WorkOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
