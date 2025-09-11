@@ -5,6 +5,7 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { PrismaService } from 'src/prisma.service';
 import { ClientCompanyAttachmentService } from './attached-file.service';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Injectable()
 export class ClientsService {
@@ -69,14 +70,23 @@ export class ClientsService {
 
   }
 
-  async findAll() {
-    const clients = await this.prisma.clientCompany.findMany({
+  async findAll(params: PaginationDto) {
+
+    const page = params.page ? Number(params.page) : 1;
+    const limit = params.limit ? Number(params.limit) : 10;
+    const skip = (page - 1) * limit;
+
+    const total = await this.prisma.clientCompany.count();
+    const data = await this.prisma.clientCompany.findMany({
+      skip,
+      take: limit,
       orderBy: {
         createdAt: 'desc',
-      },
+      }
     });
+    
+    return { data, total, page, lastPage: Math.ceil(total / limit) };
 
-    return clients
   }
 
   async findOne(id: number) {

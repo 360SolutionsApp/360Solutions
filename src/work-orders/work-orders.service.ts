@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { CreateWorkOrderDto, WorkOrderStatus } from './dto/create-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { PrismaService } from 'src/prisma.service';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Injectable()
 export class WorkOrdersService {
@@ -53,14 +54,27 @@ export class WorkOrdersService {
   }
 
   // Obtener todas las WorkOrders
-  async findAll() {
-    return this.prisma.workOrder.findMany({
+  async findAll(params: PaginationDto) {
+
+    const page = params.page ? Number(params.page) : 1;
+    const limit = params.limit ? Number(params.limit) : 10;
+    const skip = (page - 1) * limit;
+
+    const total = await this.prisma.workOrder.count();
+    const data = await this.prisma.workOrder.findMany({
+      skip,
+      take: limit,
+      orderBy: {
+        createdAt: 'desc',
+      },
       include: {
         companyClient: true,
         assigmentsClientReq: true,
         assignmentQuantities: true,
       },
     });
+    
+    return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
   // Obtener una WorkOrder por ID

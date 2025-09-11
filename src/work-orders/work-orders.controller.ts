@@ -1,9 +1,10 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { WorkOrdersService } from './work-orders.service';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { JwtAuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Controller('work-orders')
 export class WorkOrdersController {
@@ -20,8 +21,8 @@ export class WorkOrdersController {
   // Listar todas las WorkOrders
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.workOrdersService.findAll();
+  findAll(@Query() query: PaginationDto) {
+    return this.workOrdersService.findAll(query);
   }
 
   // Buscar una WorkOrder por id

@@ -1,10 +1,11 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UseInterceptors, ParseIntPipe, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UseInterceptors, ParseIntPipe, UploadedFile, Query } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { JwtAuthGuard } from 'src/auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Controller('clients')
 export class ClientsController {
@@ -34,8 +35,8 @@ export class ClientsController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.clientsService.findAll();
+  findAll(@Query() query: PaginationDto) {
+    return this.clientsService.findAll(query);
   }
 
   @UseGuards(JwtAuthGuard)
