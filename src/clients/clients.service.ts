@@ -6,44 +6,59 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { PrismaService } from 'src/prisma.service';
 import { ClientCompanyAttachmentService } from './attached-file.service';
 import { PaginationDto } from 'src/helpers/pagination.dto';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly clientCompanyAttachmentService: ClientCompanyAttachmentService
+    private readonly clientCompanyAttachmentService: ClientCompanyAttachmentService,
+    private readonly usersService: UsersService
   ) { }
   async create(userEmail: string, createClientDto: CreateClientDto) {
-
     const user = await this.prisma.user.findUnique({
-      where: {
-        email: userEmail
-      }
-    })
+      where: { email: userEmail },
+    });
 
     if (!user) {
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
 
+    // Datos del cliente
     const dataSelf = {
       IdUserRegistering: user.id,
-      ...createClientDto
-    }
+      ...createClientDto,
+    };
 
     try {
+      // 1. Crear el cliente
       const client = await this.prisma.clientCompany.create({
-        data: dataSelf
+        data: dataSelf,
       });
 
-      if (client) {
-        return client;
-      }
+      // 2. Armar el DTO del usuario desde el DTO del cliente
+      const createUserDto = {
+        names: createClientDto.representativeName, // 👈 puedes dividir en nombres/apellidos si lo deseas
+        lastNames: '',
+        documentTypeId: 1, // 👈 puedes parametrizar si lo necesitas
+        documentNumber: createClientDto.employerIdentificationNumber,
+        phone: createClientDto.employerPhone,
+        email: createClientDto.employerEmail,
+        roleId: 3, // 👈 rol fijo de cliente
+        currentCityId: createClientDto.cityCompany,
+        address: createClientDto.companyAddress,
+        assignmentIds: [], // 👈 opcional, si no aplica deja vacío
+        coustPerHour: null, // 👈 opcional
+      };
 
+      // 3. Crear el usuario cliente usando UsersService
+      const userClient = await this.usersService.create(createUserDto);
+
+      return { client, userClient };
     } catch (error) {
-      console.error("Error creating client:", error);
-      throw new Error("Error creating client");
+      console.error('Error creating client and user:', error);
+      throw new Error('Error creating client and user');
     }
-
   }
 
   async uploadFile(userEmail: string, clientCompanyId: number, file: Express.Multer.File) {
@@ -56,7 +71,7 @@ export class ClientsService {
     }
 
     try {
-      // 🔹 Subir contrato PDF al bucket y actualizar ClientCompany
+      // Subir contrato PDF al bucket y actualizar ClientCompany
       return await this.clientCompanyAttachmentService.uploadOrUpdateContractPdf(
         file,
         clientCompanyId,
@@ -66,8 +81,6 @@ export class ClientsService {
       // imprime el error para que lo peuda leer el frontend
       throw new Error('Error uploading file');
     }
-
-
   }
 
   async findAll(params: PaginationDto) {
@@ -84,7 +97,7 @@ export class ClientsService {
         createdAt: 'desc',
       }
     });
-    
+
     return { data, total, page, lastPage: Math.ceil(total / limit) };
 
   }
@@ -159,7 +172,7 @@ export class ClientsService {
 
     try {
 
-      // 🔹 Eliminar contrato PDF del bucket
+      // Eliminar contrato PDF del bucket
       await this.clientCompanyAttachmentService.deleteContract(id);
 
       const client = await this.prisma.clientCompany.delete({

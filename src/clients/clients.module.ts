@@ -5,10 +5,11 @@ import { ClientsController } from './clients.controller';
 import { PrismaService } from 'src/prisma.service';
 import { ClientCompanyAttachmentService } from './attached-file.service';
 import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from 'src/users/users.module';
 
 @Module({
   controllers: [ClientsController],
   providers: [ClientsService, PrismaService, ClientCompanyAttachmentService],
-  imports: [ConfigModule],
+  imports: [ConfigModule, UsersModule],
 })
 export class ClientsModule {}
