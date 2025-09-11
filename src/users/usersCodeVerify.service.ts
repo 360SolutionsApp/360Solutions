@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from 'src/prisma.service';
 import { CodeVerifyMailerService } from './code-verify-mail.service';
@@ -89,9 +89,7 @@ export class UsersCodeVerifyService {
 
     // si el código ya existe y no ha expirado, no generar uno nuevo
     if (verifyCodeExist) {
-      return {
-        message: 'El código de verificación ya existe y no ha expirado.',
-      };
+      throw new ConflictException('El código de verificación ya existe y no ha expirado.');
     }
 
     // Elimina cualquier código de verificación existente para el usuario.

@@ -21,8 +21,11 @@ export class WorkOrdersController {
   // Listar todas las WorkOrders
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@Query() query: PaginationDto) {
-    return this.workOrdersService.findAll(query);
+  findAll(@Query() query: PaginationDto, @Req() req) {
+
+    const userEmail = req.user.email;
+
+    return this.workOrdersService.findAll(query, userEmail);
   }
 
   // Buscar una WorkOrder por id

@@ -54,28 +54,41 @@ export class WorkOrdersService {
   }
 
   // Obtener todas las WorkOrders
-  async findAll(params: PaginationDto) {
+  async findAll(params: PaginationDto, userEmail: string) {
+    const isUserClient = await this.prisma.clientCompany.findUnique({
+      where: {
+        employerEmail: userEmail,
+      },
+    });
 
     const page = params.page ? Number(params.page) : 1;
     const limit = params.limit ? Number(params.limit) : 10;
     const skip = (page - 1) * limit;
 
-    const total = await this.prisma.workOrder.count();
-    const data = await this.prisma.workOrder.findMany({
-      skip,
-      take: limit,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        companyClient: true,
-        assigmentsClientReq: true,
-        assignmentQuantities: true,
-      },
-    });
-    
+    const where = isUserClient
+      ? { companyClientId: isUserClient.id }
+      : {};
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.workOrder.findMany({
+        skip,
+        take: limit,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        where,
+        include: {
+          companyClient: true,
+          assigmentsClientReq: true,
+          assignmentQuantities: true,
+        },
+      }),
+      this.prisma.workOrder.count({ where }),
+    ]);
+
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
+
 
   // Obtener una WorkOrder por ID
   async findOne(id: number) {
