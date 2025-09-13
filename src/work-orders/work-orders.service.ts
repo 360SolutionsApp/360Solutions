@@ -18,7 +18,7 @@ export class WorkOrdersService {
 
     return this.prisma.workOrder.create({
       data: {
-        companyClientId: dto.companyClientId,
+        contractClientId: dto.ContractClientId,
         userEmailRegistry: userEmail,
         workOrderStatus: dto.workOrderStatus ?? WorkOrderStatus.PENDING,
 
@@ -36,7 +36,7 @@ export class WorkOrdersService {
           : undefined,
       },
       include: {
-        companyClient: true,
+        ContractClient: true,
         assigmentsClientReq: true,
         assignmentQuantities: {
           include: {
@@ -59,14 +59,19 @@ export class WorkOrdersService {
       where: {
         employerEmail: userEmail,
       },
+      include: {
+        ContractClient: true,
+      },
     });
 
     const page = params.page ? Number(params.page) : 1;
     const limit = params.limit ? Number(params.limit) : 10;
     const skip = (page - 1) * limit;
 
+    const contractIds = isUserClient?.ContractClient.map(c => c.id) ?? [];
+
     const where = isUserClient
-      ? { companyClientId: isUserClient.id }
+      ? { contractClientId: { in: contractIds } }
       : {};
 
     const [data, total] = await this.prisma.$transaction([
@@ -78,7 +83,7 @@ export class WorkOrdersService {
         },
         where,
         include: {
-          companyClient: true,
+          ContractClient: true,
           assigmentsClientReq: true,
           assignmentQuantities: true,
         },
@@ -95,7 +100,7 @@ export class WorkOrdersService {
     const workOrder = await this.prisma.workOrder.findUnique({
       where: { id },
       include: {
-        companyClient: true,
+        ContractClient: true,
         assigmentsClientReq: true,
         assignmentQuantities: true,
       },
@@ -151,7 +156,7 @@ export class WorkOrdersService {
             : undefined,
         },
         include: {
-          companyClient: true,
+          ContractClient: true,
           assigmentsClientReq: true,
           assignmentQuantities: {
             include: {

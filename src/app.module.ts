@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { ClientsModule } from './clients/clients.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
+import { ContractsModule } from './contracts/contracts.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
     AssignmentsModule,
     ClientsModule,
     WorkOrdersModule,
+    ContractsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

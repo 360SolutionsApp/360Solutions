@@ -86,24 +86,38 @@ model Assignment {
 }
 
 model ClientCompany {
-  id                           Int              @id @default(autoincrement())
+  id                           Int       @id @default(autoincrement())
   companyName                  String
   employerIdentificationNumber String
-  employerEmail                String           @unique
+  employerEmail                String    @unique
   employerPhone                String
   representativeName           String
-  cityCompany                  Int
-  companyAddress               String
-  attachedContractUrl          String
-  contractCodePo               String
-  totalContractValue           Int
-  contractStatus               WorkOrderStatus? @default(PENDING)
-  administrativeDiscounts      Int
-  DateStartWork                DateTime         @default(now())
   IdUserRegistering            Int
-  createdAt                    DateTime         @default(now())
-  updatedAt                    DateTime?        @updatedAt
-  workOrder                    workOrder[]
+  clientCityId                 Int
+  clientAddress                String
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime? @updatedAt
+
+  ContractClient ContractClient[]
+}
+
+model ContractClient {
+  id                      Int              @id @default(autoincrement())
+  clientId                Int              @unique
+  client                  ClientCompany    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contractCityId          Int
+  contractAddress         String
+  attachedContractUrl     String?
+  contractCodePo          String
+  totalContractValue      Int
+  contractStatus          WorkOrderStatus? @default(PENDING)
+  administrativeDiscounts Int
+  DateStartWork           DateTime         @default(now())
+  IdUserRegistering       Int
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime?        @updatedAt
+
+  workOrder workOrder[]
 }
 
 enum WorkOrderStatus {
@@ -115,9 +129,7 @@ enum WorkOrderStatus {
 }
 
 model workOrder {
-  id              Int           @id @default(autoincrement())
-  companyClientId Int
-  companyClient   ClientCompany @relation(fields: [companyClientId], references: [id], onDelete: Restrict)
+  id Int @id @default(autoincrement())
 
   assigmentsClientReq  Assignment[]                     @relation("assigmentWorkOrder")
   assignmentQuantities assignmentQuantityForWorkOrder[]
@@ -126,6 +138,8 @@ model workOrder {
   userEmailRegistry String
   createdAt         DateTime        @default(now())
   updatedAt         DateTime?       @updatedAt
+  ContractClient    ContractClient? @relation(fields: [contractClientId], references: [id], onDelete: Restrict)
+  contractClientId  Int?
 }
 
 model assignmentQuantityForWorkOrder {

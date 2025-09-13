@@ -40,7 +40,7 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsInt()
-  currentCityId: number;
+  currentCityId?: number;
 
   @IsOptional()
   @IsString()

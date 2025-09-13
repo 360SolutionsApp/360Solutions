@@ -1,10 +1,9 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UseInterceptors, ParseIntPipe, UploadedFile, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { JwtAuthGuard } from 'src/auth/auth.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from 'src/auth/auth.guard'; 
 import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Controller('clients')
@@ -20,7 +19,7 @@ export class ClientsController {
     return this.clientsService.create(userEmail, createClientDto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /*@UseGuards(JwtAuthGuard)
   @Post(':id/upload-contract')
   @UseInterceptors(FileInterceptor('file'))
   async uploadContract(
@@ -31,7 +30,7 @@ export class ClientsController {
     const userEmail = req.user.email;
     const url = await this.clientsService.uploadFile(userEmail, clientCompanyId, file);
     return { attachedContractUrl: url };
-  }
+  }*/
 
   @UseGuards(JwtAuthGuard)
   @Get()

@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { IsInt, IsString, IsEmail, IsDateString, IsOptional, IsDate } from 'class-validator';
+import { IsInt, IsString, IsEmail, IsOptional, IsDate } from 'class-validator';
 
 export class CreateClientDto {
     @IsOptional()
@@ -22,28 +22,10 @@ export class CreateClientDto {
     representativeName: string;
 
     @IsInt()
-    cityCompany: number;
+    clientCityId: number;
 
     @IsString()
-    companyAddress: string;
-
-    @IsString()
-    attachedContractUrl: string;
-
-    @IsString()
-    contractCodePo: string;
-
-    @IsInt()
-    totalContractValue: number;
-
-    @IsInt()
-    administrativeDiscounts: number;
-
-    @IsDateString()
-    DateStartWork: string;
-
-    @IsInt()
-    IdUserRegistering: number;
+    clientAddress: string;
 
     @IsOptional()
     @IsDate()

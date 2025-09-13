@@ -24,7 +24,7 @@ export class ClientCompanyAttachmentService {
      */
     async uploadOrUpdateContractPdf(
         file: Express.Multer.File,
-        clientCompanyId: number,
+        contractId: number,
     ): Promise<string> {
         const bucket = this.configService.get<string>('AWS_S3_BUCKET');
         const region = this.configService.get<string>('AWS_REGION');
@@ -35,14 +35,14 @@ export class ClientCompanyAttachmentService {
         }
 
         const extension = 'pdf';
-        const filename = `contracts/${clientCompanyId}/${uuidv4()}.${extension}`;
+        const filename = `contracts/${contractId}/${uuidv4()}.${extension}`;
 
         // 🔹 Buscar contrato previo
-        const clientCompany = await this.prismaService.clientCompany.findUnique({
-            where: { id: clientCompanyId },
+        const contractClient = await this.prismaService.contractClient.findUnique({
+            where: { id: contractId },
         });
 
-        const previousUrl = clientCompany?.attachedContractUrl;
+        const previousUrl = contractClient?.attachedContractUrl;
 
         if (previousUrl) {
             try {
@@ -69,8 +69,8 @@ export class ClientCompanyAttachmentService {
         const url = `https://${bucket}.s3.${region}.amazonaws.com/${filename}`;
 
         // 🔹 Guardar en DB
-        await this.prismaService.clientCompany.update({
-            where: { id: clientCompanyId },
+        await this.prismaService.contractClient.update({
+            where: { id: contractId },
             data: { attachedContractUrl: url },
         });
 
@@ -81,19 +81,19 @@ export class ClientCompanyAttachmentService {
     /**
      * 📌 Eliminar contrato (S3 + DB)
      */
-    async deleteContract(clientCompanyId: number): Promise<void> {
+    async deleteContract(contractId: number): Promise<void> {
         const bucket = this.configService.get<string>('AWS_S3_BUCKET');
 
-        const clientCompany = await this.prismaService.clientCompany.findUnique({
-            where: { id: clientCompanyId },
+        const contractClient = await this.prismaService.contractClient.findUnique({
+            where: { id: contractId },
         });
 
-        if (!clientCompany?.attachedContractUrl) {
-            this.logger.warn(`⚠️ No hay contrato asociado para clientCompanyId=${clientCompanyId}`);
+        if (!contractClient?.attachedContractUrl) {
+            this.logger.warn(`⚠️ No hay contrato asociado para contractId=${contractId}`);
             return;
         }
 
-        const key = clientCompany.attachedContractUrl.split('.amazonaws.com/')[1];
+        const key = contractClient.attachedContractUrl.split('.amazonaws.com/')[1];
 
         if (key) {
             try {
@@ -110,6 +110,6 @@ export class ClientCompanyAttachmentService {
             }
         }
 
-        this.logger.log(`✅ URL eliminada de ClientCompany (id=${clientCompanyId})`);
+        this.logger.log(`✅ URL eliminada de ClientCompany (id=${contractId})`);
     }
 }
