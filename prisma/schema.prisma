@@ -19,6 +19,8 @@ model User {
   role             Role              @relation(fields: [roleId], references: [id])
   userDetail       UserDetail?       @relation("UserToUserDetail")
   userVerification UserVerification? @relation("UserToUserVerification")
+
+  workersAssignToOrder workersAssignToOrder[]
 }
 
 model UserDetail {
@@ -140,6 +142,8 @@ model workOrder {
   updatedAt         DateTime?       @updatedAt
   ContractClient    ContractClient? @relation(fields: [contractClientId], references: [id], onDelete: Restrict)
   contractClientId  Int?
+
+  orderAssignToCollab orderAssignToCollabs[]
 }
 
 model assignmentQuantityForWorkOrder {
@@ -151,4 +155,37 @@ model assignmentQuantityForWorkOrder {
   assignment   Assignment @relation(fields: [assignmentId], references: [id])
 
   quantityWorkers Int
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime?        @updatedAt
+}
+
+model orderAssignToCollabs {
+  id          Int       @id @default(autoincrement())
+  workOrderId Int
+  workOrder   workOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  orderWorkDateStart DateTime @default(now())
+  orderWorkDateEnd   DateTime @default(now())
+
+  orderWorkHourStart String
+  orderLocationWork  String
+  orderObservations  String
+
+  worksAssigned workersAssignToOrder[]
+
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime?        @updatedAt
+}
+
+model workersAssignToOrder {
+  id Int @id @default(autoincrement())
+
+  orderAssignToCollabId Int
+  orderAssignToCollab   orderAssignToCollabs @relation(fields: [orderAssignToCollabId], references: [id], onDelete: Cascade)
+
+  collaboratorId Int
+  collaborator   User @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime?        @updatedAt
 }
