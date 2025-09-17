@@ -116,8 +116,20 @@ export class ClientsService {
   }*/
 
   async findAll(params: PaginationDto) {
-    const page = params.page ? Number(params.page) : 1;
-    const limit = params.limit ? Number(params.limit) : 10;
+    const page = params.page ? Number(params.page) : undefined;
+    const limit = params.limit ? Number(params.limit) : undefined;
+
+    // 🔹 Si NO hay paginación → devolver solo el array de clientes
+    if (!page || !limit) {
+      return this.prisma.clientCompany.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          ContractClient: true,
+        },
+      });
+    }
+
+    // 🔹 Con paginación → devolver objeto con metadata
     const skip = (page - 1) * limit;
 
     const total = await this.prisma.clientCompany.count();
@@ -130,8 +142,14 @@ export class ClientsService {
       },
     });
 
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
+
 
   async findOne(id: number) {
     try {

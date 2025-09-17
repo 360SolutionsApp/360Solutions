@@ -9,6 +9,7 @@ import { AssignmentsModule } from './assignments/assignments.module';
 import { ClientsModule } from './clients/clients.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { ContractsModule } from './contracts/contracts.module';
+import { OrdersAssignToCollabsModule } from './orders-assign-to-collabs/orders-assign-to-collabs.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ContractsModule } from './contracts/contracts.module';
     ClientsModule,
     WorkOrdersModule,
     ContractsModule,
+    OrdersAssignToCollabsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
