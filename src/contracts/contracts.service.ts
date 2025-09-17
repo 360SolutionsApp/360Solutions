@@ -83,7 +83,7 @@ export class ContractsService {
         },
       });
 
-      const contracts = await this.prisma.contractClient.findMany({
+      const data = await this.prisma.contractClient.findMany({
         skip,
         take: limit,
         where: {
@@ -91,7 +91,7 @@ export class ContractsService {
         },
       });
 
-      return { contracts, total, page, lastPage: Math.ceil(total / limit) };
+      return { data, total, page, lastPage: Math.ceil(total / limit) };
 
     } else if (user.roleId === 1) {
 
@@ -99,12 +99,12 @@ export class ContractsService {
       const limit = params.limit ? Number(params.limit) : 10;
       const skip = (page - 1) * limit;
       const total = await this.prisma.contractClient.count();
-      const contracts = await this.prisma.contractClient.findMany({
+      const data = await this.prisma.contractClient.findMany({
         skip,
         take: limit,
       });
 
-      return { contracts, total, page, lastPage: Math.ceil(total / limit) };
+      return { data, total, page, lastPage: Math.ceil(total / limit) };
 
     }
 
