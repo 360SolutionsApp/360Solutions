@@ -29,6 +29,12 @@ export class OrdersAssignToCollabsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('unassigned-users/:workOrderId')
+  findAllUnassignedUsers(@Param('workOrderId') workOrderId: number) {
+    return this.ordersAssignToCollabsService.findAllUnassignedUsers(workOrderId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateOrdersAssignToCollabDto: UpdateOrdersAssignToCollabDto) {
     return this.ordersAssignToCollabsService.update(+id, updateOrdersAssignToCollabDto);

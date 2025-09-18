@@ -43,22 +43,50 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    //validar que un colaborador no tenga mas de una orden asignada a la misma hora
-    const assignedOrders = await this.prisma.orderAssignToCollabs.findMany({
+    // Validar que los colaboradores no tengan asignaciones en el mismo rango de fecha/hora
+    const conflictingAssignments = await this.prisma.orderAssignToCollabs.findMany({
       where: {
         worksAssigned: {
           some: {
-            collaboratorId: {
-              in: collaboratorIds,
-            },
+            collaboratorId: { in: collaboratorIds },
           },
         },
+        // Validación por rango de fechas
+        AND: [
+          { orderWorkDateStart: { lte: orderWorkDateEnd } }, // la asignación empieza antes de que termine la nueva
+          { orderWorkDateEnd: { gte: orderWorkDateStart } }, // la asignación termina después de que empieza la nueva
+        ],
+        // Validación por hora exacta (puedes adaptarlo a rangos si lo manejas como string HH:mm)
+        orderWorkHourStart: orderWorkHourStart,
+      },
+      include: {
+        worksAssigned: true,
       },
     });
 
-    if (assignedOrders.length > 0) {
+    if (conflictingAssignments.length > 0) {
+      // Obtener los colaboradores que tienen conflicto
+      const conflictingCollaborators = conflictingAssignments.flatMap(
+        (assignment) =>
+          assignment.worksAssigned
+            .filter((work) => collaboratorIds.includes(work.collaboratorId))
+            .map((work) => work.collaboratorId),
+      );
+
+      // traer el detalle de los colaboradores que tienen conflicto
+      const conflictingCollaboratorsDetails = await this.prisma.userDetail.findMany({
+        where: {
+          userId: { in: conflictingCollaborators },
+        },
+      });
+
+      // listar los colaboradores que tienen conflicto
+      const conflictingCollaboratorsNames = conflictingCollaboratorsDetails
+        .map((detail) => `${detail.names} ${detail.lastNames}`)
+        .join(', ');
+
       throw new BadRequestException(
-        'Algunos colaboradores ya tienen una orden asignada a la misma hora',
+        `Los colaboradores ${conflictingCollaboratorsNames} tienen una asignación en el mismo rango de fecha/hora`,
       );
     }
 
@@ -97,6 +125,43 @@ export class OrdersAssignToCollabsService {
 
   }
 
+  // Listemos todos los usuarios no asignados a una orden
+  async findAllUnassignedUsers(workOrderId: number) {
+
+    // Validar que la orden de trabajo exista
+    const order = await this.prisma.workOrder.findUnique({
+      where: { id: Number(workOrderId) },
+    });
+    if (!order) {
+      throw new BadRequestException('La orden de trabajo no existe');
+    }
+
+    // Listar todos los usuarios de role 5 que no tienen asignaciones en la orden
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        roleId: 5, // rol de "colaborador"
+        isVerified: true,
+        NOT: {
+          workersAssignToOrder: {
+            some: {
+              orderAssignToCollabId: Number(workOrderId),
+            },
+          },
+        },
+      },
+    });
+
+    // traer el detalle de los colaboradores
+    const usersDetails = await this.prisma.userDetail.findMany({
+      where: {
+        userId: { in: users.map((user) => user.id) },
+      },
+    });
+
+    return usersDetails;
+  }
+
   async findAll(params: PaginationDto) {
 
     const page = params.page ? Number(params.page) : 1;
@@ -126,7 +191,7 @@ export class OrdersAssignToCollabsService {
     });
 
     return { data, total, page, lastPage: Math.ceil(total / limit) };
- 
+
   }
 
   async findOne(id: number) {

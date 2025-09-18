@@ -28,6 +28,10 @@ export class CreateWorkOrderDto {
     @IsOptional()
     workOrderStatus?: WorkOrderStatus;
 
+    @IsInt()
+    @IsNotEmpty()
+    supervisorUserId: number;
+
     // 🚨 este ya no será necesario si unificamos la entrada en assignmentQuantities
     // pero puedes dejarlo si quieres soportar ambas formas
     @IsArray()

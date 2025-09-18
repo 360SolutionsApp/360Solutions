@@ -20,6 +20,7 @@ export class WorkOrdersService {
       data: {
         contractClientId: dto.ContractClientId,
         userEmailRegistry: userEmail,
+        supervisorUserId: dto.supervisorUserId,
         workOrderStatus: dto.workOrderStatus ?? WorkOrderStatus.PENDING,
 
         assigmentsClientReq: dto.assignmentIds
@@ -60,7 +61,7 @@ export class WorkOrdersService {
         employerEmail: userEmail,
       },
       include: {
-        ContractClient: true,
+        ContractClient: true,        
       },
     });
 
@@ -84,6 +85,7 @@ export class WorkOrdersService {
         where,
         include: {
           ContractClient: true,
+          supervisorUser: true,
           assigmentsClientReq: true,
           assignmentQuantities: true,
         },
@@ -101,12 +103,22 @@ export class WorkOrdersService {
       where: { id },
       include: {
         ContractClient: true,
+        supervisorUser: true,
         assigmentsClientReq: true,
         assignmentQuantities: true,
       },
-    });
+    }); 
 
     if (!workOrder) throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
+
+    // Incluimos a la respuesta el detalle del usuario supervisor
+    workOrder.supervisorUser = await this.prisma.user.findUnique({
+      where: { id: workOrder.supervisorUserId },
+      include: {
+        userDetail: true,
+      },
+    });
+
     return workOrder;
   }
 

@@ -243,23 +243,44 @@ export class UsersService {
   async findAllInternalUsers(params: PaginationDto, userId: number, roleId: number) {
     console.log('Role ID del usuario autenticado:', roleId);
 
-    // 🔹 Definir condición de rol
+    // 🔹 Condición de rol
     const whereCondition =
       roleId === 1
-        ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1 y 5
+        ? { roleId: { notIn: [1, 5, 6] } } // Super Admin → ve todos excepto roles 1, 5 y 6
         : { roleId: 5 }; // Otros → solo colaboradores
 
-    // 🔹 Calcular paginación
-    const page = params.page ? Number(params.page) : 1;
-    const limit = params.limit ? Number(params.limit) : 10;
+    // 🔹 Verificar si hay parámetros de paginación válidos
+    const page = params.page ? Number(params.page) : undefined;
+    const limit = params.limit ? Number(params.limit) : undefined;
+
+    // 📌 Sin paginación → devolver solo el array
+    if (!page || !limit) {
+      const allUsers = await this.prismaService.user.findMany({
+        where: whereCondition,
+        include: {
+          role: true,
+          userDetail: {
+            include: {
+              documentType: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // 🔒 Excluir password y usuario autenticado
+      return allUsers
+        .map(({ password, ...user }: any) => user)
+        .filter((user: any) => user.id !== userId);
+    }
+
+    // 📌 Con paginación → devolver objeto con metadata
     const skip = (page - 1) * limit;
 
-    // 🔹 Total de registros
     const total = await this.prismaService.user.count({
       where: whereCondition,
     });
 
-    // 🔹 Obtener registros
     const data = await this.prismaService.user.findMany({
       where: whereCondition,
       skip,
@@ -272,19 +293,16 @@ export class UsersService {
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    // 🔒 Excluir password
-    const safeData = data.map(({ password, ...user }: any) => user);
-
-    // excluir el usuario autenticado
-    const filteredData = safeData.filter((user: any) => user.id !== userId);
+    // 🔒 Excluir password y usuario autenticado
+    const safeData = data
+      .map(({ password, ...user }: any) => user)
+      .filter((user: any) => user.id !== userId);
 
     return {
-      data: filteredData,
+      data: safeData,
       meta: {
         total,
         page,
@@ -308,7 +326,7 @@ export class UsersService {
     });
 
     // Excluir password
-    const safeUsers = users.map(({ password, ...user }: any) => user);  
+    const safeUsers = users.map(({ password, ...user }: any) => user);
 
     return safeUsers;
   }
