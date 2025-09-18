@@ -306,7 +306,11 @@ export class UsersService {
         },
       },
     });
-    return users;
+
+    // Excluir password
+    const safeUsers = users.map(({ password, ...user }: any) => user);  
+
+    return safeUsers;
   }
 
   async findOne(id: number) {

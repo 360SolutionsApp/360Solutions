@@ -43,6 +43,25 @@ export class OrdersAssignToCollabsService {
       );
     }
 
+    //validar que un colaborador no tenga mas de una orden asignada a la misma hora
+    const assignedOrders = await this.prisma.orderAssignToCollabs.findMany({
+      where: {
+        worksAssigned: {
+          some: {
+            collaboratorId: {
+              in: collaboratorIds,
+            },
+          },
+        },
+      },
+    });
+
+    if (assignedOrders.length > 0) {
+      throw new BadRequestException(
+        'Algunos colaboradores ya tienen una orden asignada a la misma hora',
+      );
+    }
+
     try {
       return this.prisma.orderAssignToCollabs.create({
         data: {
