@@ -66,6 +66,12 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('findAllUsersCollabs')
+  async findAllUsers() {
+    return this.usersService.findAllUsers();
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.usersService.findOne(+id);
@@ -113,5 +119,18 @@ export class UsersController {
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     return this.usersAttachmentService.uploadMultipleAttachments(files, userId);
+  }
+
+  @Post('recover-password')
+  recoveryPassword(@Body('email') email: string) {
+    return this.usersService.recoveryPassword(email);
+  }
+
+  @Post('reset-password')
+  resetPassword(
+    @Body('email') email: string,
+    @Body('password') password: string,
+  ) {
+    return this.usersService.resetPassword(email, password);
   }
 }

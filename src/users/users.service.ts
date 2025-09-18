@@ -293,6 +293,22 @@ export class UsersService {
     };
   }
 
+  //Obtener todos los usuarios con role id 5, detalle del usuario y sus assignments
+  async findAllUsers() {
+    const users = await this.prismaService.user.findMany({
+      where: { roleId: 5 },
+      include: {
+        userDetail: {
+          include: {
+            documentType: true,
+            assignments: true,
+          },
+        },
+      },
+    });
+    return users;
+  }
+
   async findOne(id: number) {
     const user = await this.prismaService.user.findUnique({
       where: { id },
