@@ -136,7 +136,11 @@ export class WorkOrdersService {
         },
         where,
         include: {
-          ContractClient: true,
+          ContractClient: {
+            include: {
+              client: true, // 👈 Aquí incluyes la info del ClientCompany afiliado
+            },
+          },
           supervisorUser: true,
           assigmentsClientReq: true,
           assignmentQuantities: true,
