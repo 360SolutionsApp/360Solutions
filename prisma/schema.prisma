@@ -22,6 +22,10 @@ model User {
 
   workersAssignToOrder workersAssignToOrder[]
   workOrder            workOrder[]
+
+  checkIn checkIn[]
+
+  checkOut checkOut[]
 }
 
 model UserDetail {
@@ -106,7 +110,7 @@ model ClientCompany {
 
 model ContractClient {
   id                      Int              @id @default(autoincrement())
-  clientId                Int              @unique
+  clientId                Int
   client                  ClientCompany    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   contractCityId          Int
   contractAddress         String
@@ -148,6 +152,10 @@ model workOrder {
   contractClientId  Int?
 
   orderAssignToCollab orderAssignToCollabs[]
+
+  checkIn checkIn[]
+
+  checkOut checkOut[]
 }
 
 model assignmentQuantityForWorkOrder {
@@ -189,6 +197,44 @@ model workersAssignToOrder {
 
   collaboratorId Int
   collaborator   User @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model checkIn {
+  id Int @id @default(autoincrement())
+
+  orderId Int
+  order   workOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  userCollabId Int
+  userCollab   User @relation(fields: [userCollabId], references: [id], onDelete: Cascade)
+
+  startTime     String
+  initialStatus String?
+
+  attachEvidenceOneUrl String?
+  attachEvidenceTwoUrl String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model checkOut {
+  id Int @id @default(autoincrement())
+
+  orderId Int
+  order   workOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  userCollabId Int
+  userCollab   User @relation(fields: [userCollabId], references: [id], onDelete: Cascade)
+
+  finalTime     String
+  initialStatus String?
+
+  attachEvidenceOneUrl String?
+  attachEvidenceTwoUrl String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt

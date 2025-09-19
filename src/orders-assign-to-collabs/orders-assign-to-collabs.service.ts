@@ -4,10 +4,16 @@ import { CreateOrdersAssignToCollabDto } from './dto/create-orders-assign-to-col
 import { UpdateOrdersAssignToCollabDto } from './dto/update-orders-assign-to-collab.dto';
 import { PrismaService } from 'src/prisma.service';
 import { PaginationDto } from 'src/helpers/pagination.dto';
+import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.service';
+import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
 
 @Injectable()
 export class OrdersAssignToCollabsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private reportEmailService: ReportOrderAssignToCollabsMailerService,
+    private reportOrderAssignToSupervisorMailerService: ReportOrderAssignToSupervisorMailerService
+  ) { }
 
   async create(createOrdersAssignToCollabDto: CreateOrdersAssignToCollabDto) {
     const {
@@ -91,7 +97,7 @@ export class OrdersAssignToCollabsService {
     }
 
     try {
-      return this.prisma.orderAssignToCollabs.create({
+      const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
           workOrderId,
           orderWorkDateStart,
@@ -113,16 +119,77 @@ export class OrdersAssignToCollabsService {
                   id: true,
                   email: true,
                   roleId: true,
+                  userDetail: {
+                    select: {
+                      names: true,
+                      lastNames: true,
+                      assignments: true,
+                    },
+                  },
                 },
               },
             },
           },
         },
       });
+
+      // Extraemos lo correos de los colaboradores
+      const emails = newAssignment.worksAssigned.map((work) => work.collaborator.email);
+
+      // Extraemos el contractCode de la orden de trabajo
+      const contract = await this.prisma.contractClient.findUnique({
+        where: { id: order.contractClientId },
+      });
+
+      // Extraemos el nombre de la compañía por el id del contratante
+      const company = await this.prisma.clientCompany.findUnique({
+        where: { id: contract.clientId },
+      })
+
+      // Extraemos el detalle del supervisor
+      const supervisor = await this.prisma.user.findUnique({
+        where: { id: order.supervisorUserId },
+        include: {
+          userDetail: true,
+        },
+      })
+
+      // Enviar correo de reporte
+      await this.reportEmailService.sendAssignmentsToCollabs(
+        emails,
+        contract.contractCodePo,
+        company.companyName,
+        supervisor.userDetail.names + ' ' + supervisor.userDetail.lastNames,
+        orderWorkDateStart.toISOString().split('T')[0],
+        orderWorkHourStart,
+        orderLocationWork,
+        orderObservations,
+      );
+
+      // Extraemos la lista de colaboradores
+      const collaborators = newAssignment.worksAssigned.map((work) => ({
+        name: work.collaborator.userDetail.names + ' ' + work.collaborator.userDetail.lastNames,
+        email: work.collaborator.email,
+        assignments: work.collaborator.userDetail.assignments.map((assignment) => assignment.title),
+      }));
+      
+      // Enviar correo al supervisor con la lista de colaboradores asignados
+      await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
+        supervisor.email,
+        contract.contractCodePo,
+        company.companyName,
+        orderWorkDateStart.toISOString().split('T')[0],
+        orderWorkHourStart,
+        orderLocationWork,
+        orderObservations,
+        collaborators,
+      );
+
+      return newAssignment;
+
     } catch (error) {
       throw new BadRequestException(error.message || 'Error al crear la asignació del usuario a la orden de trabajo');
     }
-
   }
 
   // Listemos todos los usuarios no asignados a una orden

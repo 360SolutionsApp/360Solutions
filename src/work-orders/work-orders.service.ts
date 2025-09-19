@@ -4,10 +4,14 @@ import { CreateWorkOrderDto, WorkOrderStatus } from './dto/create-work-order.dto
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { PrismaService } from 'src/prisma.service';
 import { PaginationDto } from 'src/helpers/pagination.dto';
+import { ReportWorkOrderMailerService } from './report-mail.service';
 
 @Injectable()
 export class WorkOrdersService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reportEmailService: ReportWorkOrderMailerService
+  ) { }
 
   // Crear una nueva WorkOrder
   async create(dto: CreateWorkOrderDto, userEmail: string) {
@@ -16,9 +20,17 @@ export class WorkOrdersService {
     });
     if (!existingUser) throw new NotFoundException('El usuario no existe');
 
-    return this.prisma.workOrder.create({
+    // listar todos los usuarios con role id 2 y detalle del usuario
+    const rhUsers = await this.prisma.user.findMany({
+      where: { roleId: 2 },
+      include: {
+        userDetail: true,
+      },
+    });
+
+    const workOrder = await this.prisma.workOrder.create({
       data: {
-        contractClientId: dto.ContractClientId,
+        contractClientId: dto.contractClientId,
         userEmailRegistry: userEmail,
         supervisorUserId: dto.supervisorUserId,
         workOrderStatus: dto.workOrderStatus ?? WorkOrderStatus.PENDING,
@@ -39,6 +51,7 @@ export class WorkOrdersService {
       include: {
         ContractClient: true,
         assigmentsClientReq: true,
+        supervisorUser: { include: { userDetail: true } },
         assignmentQuantities: {
           include: {
             assignment: {   // incluir info de la tabla Assignment
@@ -52,6 +65,45 @@ export class WorkOrdersService {
         },
       },
     });
+
+    console.log('orden de trabajo', workOrder);
+
+    // Enviar email a todo el personal de RH con el detalle de la WorkOrder
+    const emailsRH = rhUsers.map((u) => u.email);
+
+    // Concatenamos el email del supervisor con el de RH
+    emailsRH.push(workOrder.supervisorUser.email);
+
+    const assignaments = workOrder.assignmentQuantities.map((q) => ({
+      name: q.assignment.title,
+      quantity: q.quantityWorkers,
+    }));
+
+    // Traemos la orden (incluyendo el contractClientId)
+    const order = await this.prisma.workOrder.findUnique({
+      where: { id: workOrder.id },
+      include: { ContractClient: true },
+    });
+
+    if (!order || !order.ContractClient) {
+      throw new BadRequestException(`No se encontró contrato asociado al workOrder con id=${workOrder.id}`);
+    }
+
+    // Ahora sí, buscamos la empresa del cliente usando el clientId de ContractClient
+    const company = await this.prisma.clientCompany.findUnique({
+      where: { id: order.ContractClient.clientId },
+      include: { ContractClient: true },
+    });
+
+    await this.reportEmailService.sendWorkOrder(
+      emailsRH,
+      company.ContractClient.filter(c => c.id === workOrder.ContractClient.id)[0].contractCodePo,
+      company.companyName,
+      assignaments,
+    );
+
+    return workOrder;
+
   }
 
   // Obtener todas las WorkOrders
@@ -61,7 +113,7 @@ export class WorkOrdersService {
         employerEmail: userEmail,
       },
       include: {
-        ContractClient: true,        
+        ContractClient: true,
       },
     });
 
@@ -107,7 +159,7 @@ export class WorkOrdersService {
         assigmentsClientReq: true,
         assignmentQuantities: true,
       },
-    }); 
+    });
 
     if (!workOrder) throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
 
@@ -137,7 +189,7 @@ export class WorkOrdersService {
         data: {
           workOrderStatus,
 
-          // 🔹 Reemplazar todas las asignaciones del cliente
+          // Reemplazar todas las asignaciones del cliente
           assigmentsClientReq: assigmentsClientReq
             ? {
               set: assigmentsClientReq.map((assignmentId) => ({ id: assignmentId })),

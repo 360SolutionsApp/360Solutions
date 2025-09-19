@@ -10,6 +10,7 @@ import { ClientsModule } from './clients/clients.module';
 import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { OrdersAssignToCollabsModule } from './orders-assign-to-collabs/orders-assign-to-collabs.module';
+import { CheckInCheckOutModule } from './check-in-check-out/check-in-check-out.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { OrdersAssignToCollabsModule } from './orders-assign-to-collabs/orders-a
     WorkOrdersModule,
     ContractsModule,
     OrdersAssignToCollabsModule,
+    CheckInCheckOutModule,
   ],
   controllers: [AppController],
   providers: [AppService],

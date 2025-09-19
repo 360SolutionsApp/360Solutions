@@ -22,7 +22,7 @@ class AssignmentQuantityDto {
 export class CreateWorkOrderDto {
     @IsInt()
     @IsNotEmpty()
-    ContractClientId: number;
+    contractClientId: number;
 
     @IsEnum(WorkOrderStatus)
     @IsOptional()
