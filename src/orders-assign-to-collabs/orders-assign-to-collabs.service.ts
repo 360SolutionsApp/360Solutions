@@ -26,6 +26,10 @@ export class OrdersAssignToCollabsService {
       collaboratorIds,
     } = createOrdersAssignToCollabDto;
 
+    // 🔹 Convertir fechas explícitamente a Date
+    const startDate = new Date(orderWorkDateStart);
+    const endDate = new Date(orderWorkDateEnd);
+
     // Validar que la orden de trabajo exista
     const order = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
@@ -59,10 +63,10 @@ export class OrdersAssignToCollabsService {
         },
         // Validación por rango de fechas
         AND: [
-          { orderWorkDateStart: { lte: orderWorkDateEnd } }, // la asignación empieza antes de que termine la nueva
-          { orderWorkDateEnd: { gte: orderWorkDateStart } }, // la asignación termina después de que empieza la nueva
+          { orderWorkDateStart: { lte: endDate } }, // la asignación empieza antes de que termine la nueva
+          { orderWorkDateEnd: { gte: startDate } }, // la asignación termina después de que empieza la nueva
         ],
-        // Validación por hora exacta (puedes adaptarlo a rangos si lo manejas como string HH:mm)
+        // Validación por hora exacta (si manejas string HH:mm)
         orderWorkHourStart: orderWorkHourStart,
       },
       include: {
@@ -100,8 +104,8 @@ export class OrdersAssignToCollabsService {
       const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
           workOrderId,
-          orderWorkDateStart,
-          orderWorkDateEnd,
+          orderWorkDateStart: startDate,
+          orderWorkDateEnd: endDate,
           orderWorkHourStart,
           orderLocationWork,
           orderObservations,
@@ -133,8 +137,10 @@ export class OrdersAssignToCollabsService {
         },
       });
 
-      // Extraemos lo correos de los colaboradores
-      const emails = newAssignment.worksAssigned.map((work) => work.collaborator.email);
+      // Extraemos los correos de los colaboradores
+      const emails = newAssignment.worksAssigned.map(
+        (work) => work.collaborator.email,
+      );
 
       // Extraemos el contractCode de la orden de trabajo
       const contract = await this.prisma.contractClient.findUnique({
@@ -144,7 +150,7 @@ export class OrdersAssignToCollabsService {
       // Extraemos el nombre de la compañía por el id del contratante
       const company = await this.prisma.clientCompany.findUnique({
         where: { id: contract.clientId },
-      })
+      });
 
       // Extraemos el detalle del supervisor
       const supervisor = await this.prisma.user.findUnique({
@@ -152,7 +158,7 @@ export class OrdersAssignToCollabsService {
         include: {
           userDetail: true,
         },
-      })
+      });
 
       // Enviar correo de reporte
       await this.reportEmailService.sendAssignmentsToCollabs(
@@ -160,7 +166,7 @@ export class OrdersAssignToCollabsService {
         contract.contractCodePo,
         company.companyName,
         supervisor.userDetail.names + ' ' + supervisor.userDetail.lastNames,
-        orderWorkDateStart.toISOString().split('T')[0],
+        startDate.toISOString().split('T')[0],
         orderWorkHourStart,
         orderLocationWork,
         orderObservations,
@@ -168,17 +174,22 @@ export class OrdersAssignToCollabsService {
 
       // Extraemos la lista de colaboradores
       const collaborators = newAssignment.worksAssigned.map((work) => ({
-        name: work.collaborator.userDetail.names + ' ' + work.collaborator.userDetail.lastNames,
+        name:
+          work.collaborator.userDetail.names +
+          ' ' +
+          work.collaborator.userDetail.lastNames,
         email: work.collaborator.email,
-        assignments: work.collaborator.userDetail.assignments.map((assignment) => assignment.title),
+        assignments: work.collaborator.userDetail.assignments.map(
+          (assignment) => assignment.title,
+        ),
       }));
-      
+
       // Enviar correo al supervisor con la lista de colaboradores asignados
       await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
         supervisor.email,
         contract.contractCodePo,
         company.companyName,
-        orderWorkDateStart.toISOString().split('T')[0],
+        startDate.toISOString().split('T')[0],
         orderWorkHourStart,
         orderLocationWork,
         orderObservations,
@@ -186,11 +197,14 @@ export class OrdersAssignToCollabsService {
       );
 
       return newAssignment;
-
     } catch (error) {
-      throw new BadRequestException(error.message || 'Error al crear la asignació del usuario a la orden de trabajo');
+      throw new BadRequestException(
+        error.message ||
+        'Error al crear la asignación del usuario a la orden de trabajo',
+      );
     }
   }
+
 
   // Listemos todos los usuarios no asignados a una orden
   async findAllUnassignedUsers(workOrderId: number) {
@@ -230,7 +244,6 @@ export class OrdersAssignToCollabsService {
   }
 
   async findAll(params: PaginationDto) {
-
     const page = params.page ? Number(params.page) : 1;
     const limit = params.limit ? Number(params.limit) : 10;
     const skip = (page - 1) * limit;
@@ -243,6 +256,29 @@ export class OrdersAssignToCollabsService {
         createdAt: 'desc',
       },
       include: {
+        // 👇 Traer la orden de trabajo relacionada
+        workOrder: {
+          include: {
+            ContractClient: {
+              include: {
+                client: true, // cliente (compañía)
+              },
+            },
+            supervisorUser: {
+              select: {
+                id: true,
+                email: true,
+                userDetail: {
+                  select: {
+                    names: true,
+                    lastNames: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        // 👇 Traer colaboradores asignados con detalles
         worksAssigned: {
           include: {
             collaborator: {
@@ -250,6 +286,18 @@ export class OrdersAssignToCollabsService {
                 id: true,
                 email: true,
                 roleId: true,
+                userDetail: {
+                  select: {
+                    names: true,
+                    lastNames: true,
+                    assignments: {
+                      select: {
+                        id: true,
+                        title: true,
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -258,7 +306,6 @@ export class OrdersAssignToCollabsService {
     });
 
     return { data, total, page, lastPage: Math.ceil(total / limit) };
-
   }
 
   async findOne(id: number) {

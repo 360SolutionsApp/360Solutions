@@ -109,49 +109,55 @@ export class WorkOrdersService {
   // Obtener todas las WorkOrders
   async findAll(params: PaginationDto, userEmail: string) {
     const isUserClient = await this.prisma.clientCompany.findUnique({
-      where: {
-        employerEmail: userEmail,
-      },
-      include: {
-        ContractClient: true,
-      },
+      where: { employerEmail: userEmail },
+      include: { ContractClient: true },
     });
 
-    const page = params.page ? Number(params.page) : 1;
-    const limit = params.limit ? Number(params.limit) : 10;
-    const skip = (page - 1) * limit;
-
     const contractIds = isUserClient?.ContractClient.map(c => c.id) ?? [];
+    const where = isUserClient ? { contractClientId: { in: contractIds } } : {};
 
-    const where = isUserClient
-      ? { contractClientId: { in: contractIds } }
-      : {};
+    // 🔹 Si no hay paginación → devolver array completo
+    if (!params.page && !params.limit) {
+      return this.prisma.workOrder.findMany({
+        orderBy: { createdAt: 'desc' },
+        where,
+        include: {
+          ContractClient: { include: { client: true } },
+          supervisorUser: {
+            select: { id: true, email: true, roleId: true, userDetail: true },
+          },
+          assigmentsClientReq: true,
+          assignmentQuantities: {
+            include: {
+              assignment: { select: { id: true, title: true, costPerHour: true } },
+            },
+          },
+        },
+      });
+    }
+
+    // 🔹 Con paginación
+    const page = Number(params.page);
+    const limit = Number(params.limit);
+    const skip = (page - 1) * limit;
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.workOrder.findMany({
         skip,
         take: limit,
-        orderBy: {
-          createdAt: 'desc',
-        },
+        orderBy: { createdAt: 'desc' },
         where,
         include: {
-          ContractClient: {
-            include: {
-              client: true, // 👈 Aquí incluyes la info del ClientCompany afiliado
-            },
-          },
+          ContractClient: { include: { client: true } },
           supervisorUser: {
-            select: {
-              id: true,
-              email: true,
-              roleId: true,
-              userDetail: true,
-              // password no se incluye
-            },
+            select: { id: true, email: true, roleId: true, userDetail: true },
           },
           assigmentsClientReq: true,
-          assignmentQuantities: true,
+          assignmentQuantities: {
+            include: {
+              assignment: { select: { id: true, title: true, costPerHour: true } },
+            },
+          },
         },
       }),
       this.prisma.workOrder.count({ where }),
@@ -181,7 +187,17 @@ export class WorkOrdersService {
           },
         },
         assigmentsClientReq: true,
-        assignmentQuantities: true,
+        assignmentQuantities: {
+          include: {
+            assignment: {   // incluir info de la tabla Assignment
+              select: {
+                id: true,
+                title: true,
+                costPerHour: true,
+              },
+            },
+          },
+        },
       },
     });
 
