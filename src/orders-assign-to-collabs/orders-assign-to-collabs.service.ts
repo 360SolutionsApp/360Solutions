@@ -243,25 +243,59 @@ export class OrdersAssignToCollabsService {
     return usersDetails;
   }
 
-  async findAll(params: PaginationDto) {
-    const page = params.page ? Number(params.page) : 1;
-    const limit = params.limit ? Number(params.limit) : 10;
-    const skip = (page - 1) * limit;
+  async findAll(params: PaginationDto, user) {
+    const { page, limit } = params;
 
-    const total = await this.prisma.orderAssignToCollabs.count();
+    const getUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+    });
+
+    if (!getUser) {
+      throw new Error('User not found');
+    }
+
+    // 👇 Si no vienen parámetros de paginación => no paginar
+    const shouldPaginate = !!(page && limit);
+    const pageNumber = page ? Number(page) : 1;
+    const limitNumber = limit ? Number(limit) : 10;
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // 👇 Condición base de búsqueda
+    let whereCondition: any = {};
+    console.log('Role ID del usuario autenticado:', getUser);
+    if (getUser.roleId === 5) {
+      // Si es colaborador (roleId = 5), filtrar por su email
+
+      whereCondition = {
+        worksAssigned: {
+          some: {
+            collaborator: {
+              email: getUser.email,
+            },
+          },
+        },
+      };
+    }
+
+    // 👇 Contar registros filtrados
+    const total = await this.prisma.orderAssignToCollabs.count({
+      where: whereCondition,
+    });
+
+    // 👇 Consultar datos con o sin paginación
     const data = await this.prisma.orderAssignToCollabs.findMany({
-      skip,
-      take: limit,
+      where: whereCondition,
+      skip: shouldPaginate ? skip : undefined,
+      take: shouldPaginate ? limitNumber : undefined,
       orderBy: {
         createdAt: 'desc',
       },
       include: {
-        // 👇 Traer la orden de trabajo relacionada
         workOrder: {
           include: {
             ContractClient: {
               include: {
-                client: true, // cliente (compañía)
+                client: true,
               },
             },
             supervisorUser: {
@@ -278,7 +312,6 @@ export class OrdersAssignToCollabsService {
             },
           },
         },
-        // 👇 Traer colaboradores asignados con detalles
         worksAssigned: {
           include: {
             collaborator: {
@@ -305,7 +338,17 @@ export class OrdersAssignToCollabsService {
       },
     });
 
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
+    // 👇 Si no hay paginación, devolver solo data
+    if (!shouldPaginate) {
+      return data;
+    }
+
+    return {
+      data,
+      total,
+      page: pageNumber,
+      lastPage: Math.ceil(total / limitNumber),
+    };
   }
 
   async findOne(id: number) {

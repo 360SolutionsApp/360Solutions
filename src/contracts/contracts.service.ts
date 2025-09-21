@@ -63,7 +63,6 @@ export class ContractsService {
       throw new Error('User not found');
     }
 
-
     if (user.roleId === 3) {
 
       // Extraemos los clientes por el email del user
@@ -89,6 +88,12 @@ export class ContractsService {
         where: {
           clientId: client.id,
         },
+        include: {
+          client: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
 
       return { data, total, page, lastPage: Math.ceil(total / limit) };
@@ -102,6 +107,12 @@ export class ContractsService {
       const data = await this.prisma.contractClient.findMany({
         skip,
         take: limit,
+        include: {
+          client: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
 
       return { data, total, page, lastPage: Math.ceil(total / limit) };

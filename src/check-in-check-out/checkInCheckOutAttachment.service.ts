@@ -57,7 +57,7 @@ export class CheckInCheckOutAttachmentService {
             urls.push(url);
         }
 
-        // 🔹 Guardar las evidencias en DB
+        // Guardar las evidencias en DB
         if (type === 'checkIn') {
             await this.prisma.checkIn.update({
                 where: { id: recordId },
@@ -116,7 +116,7 @@ export class CheckInCheckOutAttachmentService {
             }
         }
 
-        // 🔹 Resetear en DB
+        // Resetear en DB
         if (type === 'checkIn') {
             await this.prisma.checkIn.update({
                 where: { id: recordId },
