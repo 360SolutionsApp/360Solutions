@@ -12,6 +12,15 @@ export class CheckInCheckOutService {
     const { checkType, orderId, userCollabId, time, status } = dto;
 
     if (checkType === CheckType.IN) {
+
+      // Verificar si la orden de trabajo ya tiene un check-in
+      const existingCheckIn = await this.prisma.checkIn.findFirst({
+        where: { orderId },
+      });
+      if (existingCheckIn) {
+        throw new BadRequestException('La orden de trabajo ya tiene un check-in');
+      }
+
       const checkIn = await this.prisma.checkIn.create({
         data: {
           orderId,
@@ -30,6 +39,15 @@ export class CheckInCheckOutService {
       return checkIn;
 
     } else if (checkType === CheckType.OUT) {
+
+      // Verificar si la orden de trabajo ya tiene un check-out
+      const existingCheckOut = await this.prisma.checkOut.findFirst({
+        where: { orderId },
+      });
+      if (existingCheckOut) {
+        throw new BadRequestException('La orden de trabajo ya tiene un check-out');
+      }
+
       const checkOut = await this.prisma.checkOut.create({
         data: {
           orderId,
@@ -138,6 +156,13 @@ export class CheckInCheckOutService {
     }
 
     throw new BadRequestException(`No se encontró registro con id ${id}`);
+  }
+
+  // Obtener el CheckIn/Checkout según el id de la orden de trabajo
+  async findByOrderId(orderId: number) {
+    const checkIn = await this.prisma.checkIn.findFirst({ where: { orderId } });
+    const checkOut = await this.prisma.checkOut.findFirst({ where: { orderId } });
+    return { checkIn, checkOut };
   }
 
   async remove(id: number) {

@@ -50,6 +50,12 @@ export class CheckInCheckOutController {
   findOne(@Param('id') id: string) {
     return this.checkInCheckOutService.findOne(+id);
   }
+
+  @Get('/orderId/:orderId')
+  findByOrderId(@Param('orderId') orderId: string) {
+    return this.checkInCheckOutService.findByOrderId(+orderId);
+  }
+
   /*
     @Patch(':id')
     update(@Param('id') id: string, @Body() updateCheckInCheckOutDto: UpdateCheckInCheckOutDto) {
