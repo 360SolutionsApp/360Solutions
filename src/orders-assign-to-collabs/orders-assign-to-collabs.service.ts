@@ -61,13 +61,18 @@ export class OrdersAssignToCollabsService {
             collaboratorId: { in: collaboratorIds },
           },
         },
-        // Validación por rango de fechas
+        // Validación por traslape de rango de fechas
         AND: [
-          { orderWorkDateStart: { lte: endDate } }, // la asignación empieza antes de que termine la nueva
-          { orderWorkDateEnd: { gte: startDate } }, // la asignación termina después de que empieza la nueva
+          {
+            // ⚡ Solo considerar órdenes que caen en el mismo día o rango
+            orderWorkDateStart: { lte: endDate },
+            orderWorkDateEnd: { gte: startDate },
+          },
         ],
-        // Validación por hora exacta (si manejas string HH:mm)
-        orderWorkHourStart: orderWorkHourStart,
+        // ⚡ Validar hora solo si es el mismo día
+        ...(startDate.toISOString().split("T")[0] === endDate.toISOString().split("T")[0]
+          ? { orderWorkHourStart: orderWorkHourStart }
+          : {}),
       },
       include: {
         worksAssigned: true,
@@ -96,7 +101,7 @@ export class OrdersAssignToCollabsService {
         .join(', ');
 
       throw new BadRequestException(
-        `Los colaboradores ${conflictingCollaboratorsNames} tienen una asignación en el mismo rango de fecha/hora`,
+        `Los colaboradores ${conflictingCollaboratorsNames} tienen una asignación en el mismo rango de fecha/hora ${startDate.toISOString().split('T')[0]} ${orderWorkHourStart} - ${endDate.toISOString().split('T')[0]}`,
       );
     }
 

@@ -23,9 +23,9 @@ export class WorkOrdersController {
   @Get()
   findAll(@Query() query: PaginationDto, @Req() req) {
 
-    const userEmail = req.user.email;
+    const user = req.user;
 
-    return this.workOrdersService.findAll(query, userEmail);
+    return this.workOrdersService.findAll(query, user);
   }
 
   // Buscar una WorkOrder por id

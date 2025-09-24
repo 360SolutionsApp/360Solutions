@@ -107,63 +107,101 @@ export class WorkOrdersService {
   }
 
   // Obtener todas las WorkOrders
-  async findAll(params: PaginationDto, userEmail: string) {
-    const isUserClient = await this.prisma.clientCompany.findUnique({
-      where: { employerEmail: userEmail },
-      include: { ContractClient: true },
+  async findAll(params: PaginationDto, user: any) {
+    console.log('user', user);
+
+    const getUser = await this.prisma.user.findUnique({
+      where: { email: user.email },
+      select: { id: true, roleId: true },
     });
 
-    const contractIds = isUserClient?.ContractClient.map(c => c.id) ?? [];
-    const where = isUserClient ? { contractClientId: { in: contractIds } } : {};
-
-    // 🔹 Si no hay paginación → devolver array completo
-    if (!params.page && !params.limit) {
-      return this.prisma.workOrder.findMany({
-        orderBy: { createdAt: 'desc' },
-        where,
-        include: {
-          ContractClient: { include: { client: true } },
-          supervisorUser: {
-            select: { id: true, email: true, roleId: true, userDetail: true },
-          },
-          assigmentsClientReq: true,
-          assignmentQuantities: {
-            include: {
-              assignment: { select: { id: true, title: true, costPerHour: true } },
-            },
-          },
-        },
-      });
+    if (!getUser) {
+      throw new NotFoundException('Usuario no encontrado');
     }
 
-    // 🔹 Con paginación
-    const page = Number(params.page);
-    const limit = Number(params.limit);
-    const skip = (page - 1) * limit;
+    const { id: userId, roleId } = getUser;
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.workOrder.findMany({
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        where,
-        include: {
-          ContractClient: { include: { client: true } },
-          supervisorUser: {
-            select: { id: true, email: true, roleId: true, userDetail: true },
-          },
-          assigmentsClientReq: true,
-          assignmentQuantities: {
-            include: {
-              assignment: { select: { id: true, title: true, costPerHour: true } },
+    // Parseo seguro de page y limit
+    const page = params.page ? Number(params.page) : null;
+    const limit = params.limit ? Number(params.limit) : null;
+    const skip = page && limit ? (page - 1) * limit : undefined;
+
+    let whereCondition: any = {};
+
+    // Si es colaborador (rol 5), solo ve sus órdenes
+    if (roleId === 5) {
+      whereCondition = {
+        orderAssignToCollab: {
+          some: {
+            worksAssigned: {
+              some: { collaboratorId: userId },
             },
           },
         },
-      }),
-      this.prisma.workOrder.count({ where }),
-    ]);
+      };
+    }
 
-    return { data, total, page, lastPage: Math.ceil(total / limit) };
+    // --- Si tiene paginación
+    if (page && limit) {
+      const [orders, total] = await this.prisma.$transaction([
+        this.prisma.workOrder.findMany({
+          where: whereCondition,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            ContractClient: {
+              include: { client: true },
+            },
+            supervisorUser: {
+              select: { id: true, email: true, roleId: true },
+            },
+            orderAssignToCollab: {
+              include: {
+                worksAssigned: {
+                  include: {
+                    collaborator: { select: { id: true, email: true } },
+                  },
+                },
+              },
+            },
+          },
+        }),
+        this.prisma.workOrder.count({ where: whereCondition }),
+      ]);
+
+      return {
+        data: orders,
+        meta: {
+          total,
+          page,
+          lastPage: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    // --- Si NO hay paginación → solo array
+    return this.prisma.workOrder.findMany({
+      where: whereCondition,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        ContractClient: {
+          include: { client: true },
+        },
+        supervisorUser: {
+          select: { id: true, email: true, roleId: true },
+        },
+        orderAssignToCollab: {
+          include: {
+            worksAssigned: {
+              include: {
+                collaborator: { select: { id: true, email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   // Obtener una WorkOrder por ID
@@ -172,7 +210,7 @@ export class WorkOrdersService {
     // extraemos la observación de la asignación de la orden de trabajo con el id
     const workOrderAssignments = await this.prisma.orderAssignToCollabs.findMany({
       where: { workOrderId: id },
-    });  
+    });
 
     const workOrder = await this.prisma.workOrder.findUnique({
       where: { id },
@@ -209,11 +247,11 @@ export class WorkOrdersService {
     if (!workOrder) {
       throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
     }
- 
+
     const makeOrder = {
       ...workOrder,
       orderDetail: workOrderAssignments[0],
-    }; 
+    };
 
     return makeOrder;
   }
