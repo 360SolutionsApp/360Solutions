@@ -166,9 +166,14 @@ export class WorkOrdersService {
     return { data, total, page, lastPage: Math.ceil(total / limit) };
   }
 
-
   // Obtener una WorkOrder por ID
   async findOne(id: number) {
+
+    // extraemos la observación de la asignación de la orden de trabajo con el id
+    const workOrderAssignments = await this.prisma.orderAssignToCollabs.findMany({
+      where: { workOrderId: id },
+    });  
+
     const workOrder = await this.prisma.workOrder.findUnique({
       where: { id },
       include: {
@@ -204,8 +209,13 @@ export class WorkOrdersService {
     if (!workOrder) {
       throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
     }
+ 
+    const makeOrder = {
+      ...workOrder,
+      orderDetail: workOrderAssignments[0],
+    }; 
 
-    return workOrder;
+    return makeOrder;
   }
 
   // Actualizar WorkOrder
