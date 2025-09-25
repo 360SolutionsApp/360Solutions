@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 
 @Injectable()
@@ -7,7 +7,8 @@ export class CodeVerifyMailerService {
     constructor(private readonly mailerService: MailerService) { }
 
     async sendVerificationCode(email: string, code: string, token: string, timeExpiration: number) {
-        const htmlTemplate = `
+        try {
+            const htmlTemplate = `
             <!DOCTYPE html>
             <html>
             <head>
@@ -79,7 +80,7 @@ export class CodeVerifyMailerService {
                 <span class="verification-code">${code}</span>
                 </div>
                 
-                <p>Por favor, ingresa este código ingresando a ${process.env.FRONTEND_URL+'user='+email+'/token='+token}</p>
+                <p>Por favor, ingresa este código ingresando a ${process.env.FRONTEND_URL + 'user=' + email + '/token=' + token}</p>
             
                 <div class="footer">
                 <p>Este código expirará en ${timeExpiration} minutos.</p>
@@ -90,10 +91,14 @@ export class CodeVerifyMailerService {
             </html>
         `;
 
-        await this.mailerService.sendMail({
-            to: email,
-            subject: 'Tu código de verificación',
-            html: htmlTemplate,
-        });
+            await this.mailerService.sendMail({
+                to: email,
+                subject: 'Tu código de verificación',
+                html: htmlTemplate,
+            });
+        } catch (error) {
+            console.error('Error sending verification code email:', error);
+            throw new BadRequestException('No se pudo enviar el correo de verificación.', error);
+        }
     }
 }
