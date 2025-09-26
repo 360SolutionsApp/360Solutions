@@ -1,10 +1,16 @@
 /* eslint-disable prettier/prettier */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ZohoMailService } from 'src/mailer/zoho-mailer.service';
 
 @Injectable()
 export class ReportWorkOrderMailerService {
-  constructor(private readonly mailerService: MailerService) {}
+  // Ambos servicios son opcionales: usa el que esté disponible
+  constructor(
+    private readonly mailerService: MailerService,        // SMTP
+    @Inject(forwardRef(() => ZohoMailService))
+    private readonly zohoMailService: ZohoMailService,    // API Zoho
+  ) { }
 
   async sendWorkOrder(
     emails: string[], // varios destinatarios
@@ -50,11 +56,26 @@ export class ReportWorkOrderMailerService {
       </html>
     `;
 
-    // Un solo envío con todos los destinatarios en copia
-    await this.mailerService.sendMail({
-      to: emails, // todos en un único correo
-      subject: 'Nueva orden de trabajo creada',
-      html: htmlTemplate,
-    });
+    const subject = 'Nueva orden de trabajo creada';
+
+    // ✅ Si ZohoMailService está configurado, usarlo
+    if (this.zohoMailService) {
+      // Un solo correo con todos en "to"
+      await this.zohoMailService.sendMail({
+        to: emails.join(','), // la API de Zoho espera string
+        subject,
+        html: htmlTemplate,
+      });
+    }
+    // ✅ De lo contrario, usar Mailer SMTP
+    else if (this.mailerService) {
+      await this.mailerService.sendMail({
+        to: emails, // puede recibir array
+        subject,
+        html: htmlTemplate,
+      });
+    } else {
+      throw new Error('No hay servicio de correo disponible');
+    }
   }
 }
