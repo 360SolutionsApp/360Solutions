@@ -37,7 +37,7 @@ export class ReportWorkOrderMailerService {
       <body>
         <div class="container">
           <div class="logo">
-            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo.png" alt="360 Solutions - Logo">
+            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo-01.png" alt="360 Solutions - Logo">
           </div>
           <h2 class="header">Nueva orden de trabajo</h2>
           <p>Se ha creado una nueva orden de trabajo con la siguiente información:</p>

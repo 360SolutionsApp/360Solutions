@@ -175,6 +175,7 @@ export class OrdersAssignToCollabsService {
         orderWorkHourStart,
         orderLocationWork,
         orderObservations,
+        true, // usar Zoho API
       );
 
       // Extraemos la lista de colaboradores
@@ -199,6 +200,7 @@ export class OrdersAssignToCollabsService {
         orderLocationWork,
         orderObservations,
         collaborators,
+
       );
 
       return newAssignment;

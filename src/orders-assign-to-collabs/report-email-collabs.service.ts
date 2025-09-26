@@ -1,13 +1,20 @@
 /* eslint-disable prettier/prettier */
 import { Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ZohoMailService } from 'src/mailer/zoho-mailer.service';
 
 @Injectable()
 export class ReportOrderAssignToCollabsMailerService {
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService,   // Para SMTP
+    private readonly zohoMailService: ZohoMailService, // Para API de Zoho
+  ) { }
 
+  /**
+   * Envía notificación a los colaboradores sobre su asignación a una orden
+   */
   async sendAssignmentsToCollabs(
-    emails: string[], // varios destinatarios
+    emails: string[],            // varios destinatarios
     orderCode: string,
     companyName: string,
     supervisor: string,
@@ -15,6 +22,7 @@ export class ReportOrderAssignToCollabsMailerService {
     hourStartWork: string,
     locationWork: string,
     observations: string,
+    useZohoApi = false,          // 🔑 Elegir Zoho API o SMTP
   ) {
     const htmlTemplate = `
       <!DOCTYPE html>
@@ -37,7 +45,7 @@ export class ReportOrderAssignToCollabsMailerService {
       <body>
         <div class="container">
           <div class="logo">
-            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo.png" alt="360 Solutions - Logo">
+            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo-01.png" alt="360 Solutions - Logo">
           </div>
           <h2 class="header">Nueva orden de trabajo creada</h2>
           <p>Se ha generado una nueva orden de trabajo con el siguiente detalle:</p>
@@ -62,10 +70,22 @@ export class ReportOrderAssignToCollabsMailerService {
       </html>
     `;
 
-    await this.mailerService.sendMail({
-      to: emails,
-      subject: `Nueva orden de trabajo - ${orderCode}`,
-      html: htmlTemplate,
-    });
+    const subject = `Nueva orden de trabajo - ${orderCode}`;
+
+    if (useZohoApi) {
+      // ✅ Envío usando Zoho API (acepta string o string[])
+      await this.zohoMailService.sendMail({
+        to: emails, // 👈 Usamos directamente el array de strings
+        subject,
+        html: htmlTemplate,
+      });
+    } else {
+      // ✅ Envío usando SMTP (mailer de Nest)
+      await this.mailerService.sendMail({
+        to: emails, // 👈 También acepta array de strings
+        subject,
+        html: htmlTemplate,
+      });
+    }
   }
 }

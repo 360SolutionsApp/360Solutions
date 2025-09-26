@@ -11,7 +11,7 @@ export class ZohoMailService {
   constructor(
     private readonly http: HttpService,
     private readonly config: ConfigService,
-  ) {}
+  ) { }
 
   /**
    * Obtiene un nuevo access token usando el refresh token
@@ -55,7 +55,7 @@ export class ZohoMailService {
     subject,
     html,
   }: {
-    to: string;
+    to: string | string[];
     subject: string;
     html: string;
   }): Promise<any> {
@@ -69,9 +69,12 @@ export class ZohoMailService {
 
     const url = `https://mail.zoho.com/api/accounts/${accountId}/messages`;
 
+    // 👇 Convertimos siempre a una lista separada por comas (Zoho acepta esto)
+    const toAddress = Array.isArray(to) ? to.join(',') : to;
+
     const payload = {
       fromAddress,
-      toAddress: to,
+      toAddress,
       subject,
       content: html, // puede ser HTML o texto
       askReceipt: 'yes',

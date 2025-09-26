@@ -1,10 +1,15 @@
 /* eslint-disable prettier/prettier */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ZohoMailService } from 'src/mailer/zoho-mailer.service';
 
 @Injectable()
 export class ReportOrderAssignToSupervisorMailerService {
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(
+    private readonly mailerService: MailerService, // SMTP
+    @Inject(forwardRef(() => ZohoMailService))
+    private readonly zohoMailService: ZohoMailService, // API Zoho
+  ) { }
 
   async sendAssignmentsToSupervisor(
     supervisorEmail: string, // correo único del supervisor
@@ -14,7 +19,7 @@ export class ReportOrderAssignToSupervisorMailerService {
     hourStartWork: string,
     locationWork: string,
     observations: string,
-    collaborators: { name: string; email: string, assignments: string[] }[],
+    collaborators: { name: string; email: string; assignments: string[] }[],
   ) {
     const collaboratorsList = collaborators
       .map(
@@ -44,7 +49,7 @@ export class ReportOrderAssignToSupervisorMailerService {
       <body>
         <div class="container">
           <div class="logo">
-            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo.png" alt="360 Solutions - Logo">
+            <img src="https://360solutions.s3.us-east-2.amazonaws.com/360-solutions-logo-01.png" alt="360 Solutions - Logo">
           </div>
           <h2 class="header">Colaboradores asignados a la orden</h2>
           <p>Se han asignado colaboradores a la siguiente orden de trabajo:</p>
@@ -73,10 +78,25 @@ export class ReportOrderAssignToSupervisorMailerService {
       </html>
     `;
 
-    await this.mailerService.sendMail({
-      to: supervisorEmail,
-      subject: `Asignación de colaboradores - Orden ${orderCode}`,
-      html: htmlTemplate,
-    });
+    const subject = `Asignación de colaboradores - Orden ${orderCode}`;
+
+    // ✅ Si ZohoMailService está configurado, usarlo
+    if (this.zohoMailService) {
+      await this.zohoMailService.sendMail({
+        to: supervisorEmail,
+        subject,
+        html: htmlTemplate,
+      });
+    }
+    // ✅ Si no, usar el Mailer SMTP
+    else if (this.mailerService) {
+      await this.mailerService.sendMail({
+        to: supervisorEmail,
+        subject,
+        html: htmlTemplate,
+      });
+    } else {
+      throw new Error('No hay servicio de correo disponible');
+    }
   }
 }

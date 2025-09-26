@@ -5,10 +5,12 @@ import { OrdersAssignToCollabsController } from './orders-assign-to-collabs.cont
 import { PrismaService } from 'src/prisma.service';
 import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.service';
 import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
+import { ZohoMailModule } from 'src/mailer/zoho-mailer.module';
 
 @Module({
   controllers: [OrdersAssignToCollabsController],
   providers: [OrdersAssignToCollabsService, PrismaService, ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService],
   exports: [ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService],
+  imports: [ZohoMailModule],
 })
 export class OrdersAssignToCollabsModule {}
