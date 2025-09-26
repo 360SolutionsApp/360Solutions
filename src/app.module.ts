@@ -11,6 +11,8 @@ import { WorkOrdersModule } from './work-orders/work-orders.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { OrdersAssignToCollabsModule } from './orders-assign-to-collabs/orders-assign-to-collabs.module';
 import { CheckInCheckOutModule } from './check-in-check-out/check-in-check-out.module';
+import { ZohoMailModule } from './mailer/zoho-mailer.module';
+import { MailerController } from './mailer/zoho-mailer.controller';
 
 @Module({
   imports: [
@@ -24,8 +26,9 @@ import { CheckInCheckOutModule } from './check-in-check-out/check-in-check-out.m
     ContractsModule,
     OrdersAssignToCollabsModule,
     CheckInCheckOutModule,
+    ZohoMailModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, MailerController],
   providers: [AppService],
 })
 export class AppModule {}

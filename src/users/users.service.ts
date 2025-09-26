@@ -28,6 +28,14 @@ export class UsersService {
       throw new ConflictException('El correo ya se encuentra registrado');
     }
 
+    // Verificar documento
+    const verifyDoc = await this.prismaService.userDetail.findUnique({
+      where: { documentNumber: createUserDto.documentNumber },
+    });
+    if (verifyDoc) {
+      throw new ConflictException('El número de documento ya está registrado');
+    }
+
     try {
       // 2. Crear usuario con detalle en una sola transacción (anidado)
       const user = await this.prismaService.user.create({
