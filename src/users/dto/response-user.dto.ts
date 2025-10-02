@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Expose, Type } from "class-transformer";
+import { Expose, Type } from 'class-transformer';
 import {
     IsDate,
     IsEmail,
@@ -8,15 +8,15 @@ import {
     MaxLength,
     ValidateNested,
     IsNumber,
-} from "class-validator";
-import { CreateAssignmentDto } from 'src/assignments/dto/create-assignment.dto';
-import { CreateDocumentTypeDto } from "src/document-types/dto/create-document-type.dto";
-import { CreateRoleDto } from "src/roles/dto/create-role.dto";
+} from 'class-validator';
+import { CreateDocumentTypeDto } from 'src/document-types/dto/create-document-type.dto';
+import { CreateRoleDto } from 'src/roles/dto/create-role.dto'; 
+import { AssignmentCostDto } from './create-user.dto';
 
 export class ResponseUserDto {
     @Expose()
-    @IsNumber()
     @IsOptional()
+    @IsNumber()
     id?: number;
 
     @Expose()
@@ -34,58 +34,56 @@ export class ResponseUserDto {
     lastNames: string;
 
     @Expose()
+    @IsOptional()
     @IsDate()
     @Type(() => Date)
-    @IsOptional()
     birthDate?: Date;
 
-    // 🔹 DocumentTypeId + DocumentType
     @Expose()
-    @IsNumber()
     @IsOptional()
+    @IsNumber()
     documentTypeId?: number;
 
     @Expose()
-    @ValidateNested({ each: true })
-    @Type(() => CreateAssignmentDto)
     @IsOptional()
-    Assignment?: CreateAssignmentDto[];
-
-    @Expose()
     @ValidateNested()
     @Type(() => CreateDocumentTypeDto)
-    @IsOptional()
     documentType?: CreateDocumentTypeDto;
 
     @Expose()
-    @IsString()
     @IsOptional()
+    @IsString()
     documentNumber?: string;
 
     @Expose()
-    @IsString()
     @IsOptional()
+    @IsString()
     currentCityId?: string;
 
     @Expose()
-    @IsString()
     @IsOptional()
+    @IsString()
     address?: string;
 
     @Expose()
-    @IsString()
     @IsOptional()
+    @IsString()
     phone?: string;
 
-    // 🔹 RoleId + Role
     @Expose()
     @IsNumber()
-    @IsOptional()
     roleId: number;
 
     @Expose()
+    @IsOptional()
     @ValidateNested({ each: true })
     @Type(() => CreateRoleDto)
-    @IsOptional()
     role?: CreateRoleDto[];
+
+    // 👉 Asignaciones con su costo
+    @Expose()
+    @IsOptional()
+    @ValidateNested({ each: true })
+    @Type(() => AssignmentCostDto)
+    userCostPerAssignment?: AssignmentCostDto[];
 }

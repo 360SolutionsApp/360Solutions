@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { IsInt, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsEnum } from 'class-validator';
+import { IsInt, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsEnum, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum WorkOrderStatus {
@@ -21,8 +21,12 @@ class AssignmentQuantityDto {
 
 export class CreateWorkOrderDto {
     @IsInt()
-    @IsNotEmpty()
+    @IsOptional()
     contractClientId: number;
+
+    @IsInt()
+    @IsNotEmpty()
+    clientId: number;
 
     @IsEnum(WorkOrderStatus)
     @IsOptional()
@@ -31,6 +35,22 @@ export class CreateWorkOrderDto {
     @IsInt()
     @IsNotEmpty()
     supervisorUserId: number;
+
+    @IsOptional()
+    @Type(() => Date)
+    workOrderStartDate: Date;
+
+    @IsOptional()
+    @IsString()
+    workOrderCodePo
+
+    @IsOptional()
+    @Type(() => Date)
+    workOrderEndDate: Date;
+
+    @IsOptional()
+    @IsString()
+    orderWorkHourStart: string;
 
     // 🚨 este ya no será necesario si unificamos la entrada en assignmentQuantities
     // pero puedes dejarlo si quieres soportar ambas formas

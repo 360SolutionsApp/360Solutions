@@ -132,7 +132,16 @@ export class OrdersAssignToCollabsService {
                     select: {
                       names: true,
                       lastNames: true,
-                      assignments: true,
+                      userCostPerAssignment: {
+                        include: {
+                          assignment: {
+                            select: {
+                              id: true,
+                              title: true,
+                            },
+                          },
+                        },
+                      },
                     },
                   },
                 },
@@ -185,8 +194,8 @@ export class OrdersAssignToCollabsService {
           ' ' +
           work.collaborator.userDetail.lastNames,
         email: work.collaborator.email,
-        assignments: work.collaborator.userDetail.assignments.map(
-          (assignment) => assignment.title,
+        assignments: work.collaborator.userDetail.userCostPerAssignment.map(
+          (cost) => cost.assignment.title   // ahora obtenemos el nombre de la asignación
         ),
       }));
 
@@ -330,10 +339,13 @@ export class OrdersAssignToCollabsService {
                   select: {
                     names: true,
                     lastNames: true,
-                    assignments: {
-                      select: {
-                        id: true,
-                        title: true,
+                    userCostPerAssignment: {
+                      include: {
+                        assignment: {
+                          select: {
+                            title: true,
+                          },
+                        },
                       },
                     },
                   },

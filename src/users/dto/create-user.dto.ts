@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Type } from 'class-transformer';
 import {
   IsEmail,
@@ -8,7 +9,16 @@ import {
   MinLength,
   IsArray,
   IsDate,
+  ValidateNested,
 } from 'class-validator';
+
+export class AssignmentCostDto {
+  @IsInt()
+  assignmentId: number;
+
+  @IsInt()
+  costPerHour: number;
+}
 
 export class CreateUserDto {
   @IsString()
@@ -19,9 +29,9 @@ export class CreateUserDto {
   @MinLength(3)
   lastNames: string;
 
+  @IsOptional()
   @IsDate()
   @Type(() => Date)
-  @IsOptional()
   birthDate?: Date;
 
   @IsInt()
@@ -35,9 +45,6 @@ export class CreateUserDto {
   @MinLength(7)
   phone: string;
 
-  @IsEmail()
-  email: string;
-
   @IsOptional()
   @IsInt()
   currentCityId?: number;
@@ -45,7 +52,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   @MinLength(10)
-  address: string;
+  address?: string;
+
+  @IsEmail()
+  email: string;
 
   @IsOptional()
   @IsString()
@@ -63,12 +73,10 @@ export class CreateUserDto {
   @IsInt()
   roleId: number;
 
+  // 👉 Asignaciones con costo
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  assignmentIds: number[];
-
-  @IsOptional()
-  @IsInt()
-  coustPerHour?: number;
+  @ValidateNested({ each: true })
+  @Type(() => AssignmentCostDto)
+  userCostPerAssignment?: AssignmentCostDto[];
 }

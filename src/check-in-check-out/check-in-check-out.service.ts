@@ -3,6 +3,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateCheckInCheckOutDto, CheckType } from './dto/create-check-in-check-out.dto';
 import { PrismaService } from 'src/prisma.service';
+import { WorkOrderStatus } from '@prisma/client';
 
 @Injectable()
 export class CheckInCheckOutService {
@@ -11,16 +12,26 @@ export class CheckInCheckOutService {
   async create(dto: CreateCheckInCheckOutDto) {
     const { checkType, orderId, userCollabId, time, status } = dto;
 
-    if (checkType === CheckType.IN) {
+    // Obtener colaboradores asignados a la orden
+    const assignedCollabs = await this.prisma.orderAssignToCollabs.findMany({
+      where: { workOrderId: orderId },
+    });
 
-      // Verificar si la orden de trabajo ya tiene un check-in
-      const existingCheckIn = await this.prisma.checkIn.findFirst({
-        where: { orderId },
+    if (assignedCollabs.length === 0) {
+      throw new BadRequestException('La orden de trabajo no tiene colaboradores asignados.');
+    }
+
+    if (checkType === CheckType.IN) {
+      // Verificar si el colaborador ya hizo check-in en esta orden
+      const existingCheckInForUser = await this.prisma.checkIn.findFirst({
+        where: { orderId, userCollabId },
       });
-      if (existingCheckIn) {
-        throw new BadRequestException('La orden de trabajo ya tiene un check-in');
+
+      if (existingCheckInForUser) {
+        throw new BadRequestException('Este colaborador ya hizo check-in en esta orden.');
       }
 
+      // Crear registro de check-in
       const checkIn = await this.prisma.checkIn.create({
         data: {
           orderId,
@@ -30,24 +41,37 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Actualizar el estado de la orden de trabajo a "RUNNING"
+      // Contar cuántos colaboradores han hecho check-in
+      const checkInsCount = await this.prisma.checkIn.count({ where: { orderId } });
+
+      // Actualizar estado de la orden
+      let newStatus: WorkOrderStatus;
+
+      if (checkInsCount === assignedCollabs.length) {
+        newStatus = WorkOrderStatus.RUNNING; // Todos hicieron check-in
+      } else {
+        newStatus = WorkOrderStatus.PARTIALLY_RUNNING; // Al menos uno, pero no todos
+      }
+
       await this.prisma.workOrder.update({
         where: { id: orderId },
-        data: { workOrderStatus: 'RUNNING' },
+        data: { workOrderStatus: newStatus },
       });
 
       return checkIn;
+    }
 
-    } else if (checkType === CheckType.OUT) {
-
-      // Verificar si la orden de trabajo ya tiene un check-out
-      const existingCheckOut = await this.prisma.checkOut.findFirst({
-        where: { orderId },
+    else if (checkType === CheckType.OUT) {
+      // Verificar si el colaborador ya hizo check-out en esta orden
+      const existingCheckOutForUser = await this.prisma.checkOut.findFirst({
+        where: { orderId, userCollabId },
       });
-      if (existingCheckOut) {
-        throw new BadRequestException('La orden de trabajo ya tiene un check-out');
+
+      if (existingCheckOutForUser) {
+        throw new BadRequestException('Este colaborador ya hizo check-out en esta orden.');
       }
 
+      // Crear registro de check-out
       const checkOut = await this.prisma.checkOut.create({
         data: {
           orderId,
@@ -57,17 +81,31 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Actualizar el estado de la orden de trabajo a "CLOSED"
+      // Contar cuántos colaboradores han hecho check-out
+      const checkOutsCount = await this.prisma.checkOut.count({ where: { orderId } });
+
+      // Actualizar estado de la orden
+      let newStatus: WorkOrderStatus;
+
+      if (checkOutsCount === assignedCollabs.length) {
+        newStatus = WorkOrderStatus.CLOSED; // Todos hicieron check-out
+      } else {
+        newStatus = WorkOrderStatus.PARTIALLY_CLOSED; // Algunos han hecho check-out, pero no todos
+      }
+
       await this.prisma.workOrder.update({
         where: { id: orderId },
-        data: { workOrderStatus: 'CLOSED' },
+        data: { workOrderStatus: newStatus },
       });
 
       return checkOut;
-    } else {
-      throw new BadRequestException('Tipo de registro inválido');
+    }
+
+    else {
+      throw new BadRequestException('Tipo de registro inválido. Use IN o OUT.');
     }
   }
+
 
   async findAll() {
     const checkIns = await this.prisma.checkIn.findMany({

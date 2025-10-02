@@ -19,28 +19,26 @@ export class UsersService {
   ) { }
 
   async create(createUserDto: CreateUserDto) {
-    // 1. Verificar si el correo ya existe
+    // ✅ 1. Verificar que el email no exista
     const verifyEmail = await this.prismaService.user.findUnique({
       where: { email: createUserDto.email },
     });
+    if (verifyEmail) throw new ConflictException('El correo ya está registrado');
 
-    if (verifyEmail) {
-      throw new ConflictException('El correo ya se encuentra registrado');
-    }
-
-    // Verificar documento
-    const verifyDoc = await this.prismaService.userDetail.findUnique({
-      where: { documentNumber: createUserDto.documentNumber },
-    });
-    if (verifyDoc) {
-      throw new ConflictException('El número de documento ya está registrado');
+    // ✅ 2. Verificar que el documento no exista
+    if (createUserDto.documentNumber) {
+      const verifyDoc = await this.prismaService.userDetail.findUnique({
+        where: { documentNumber: createUserDto.documentNumber },
+      });
+      if (verifyDoc) throw new ConflictException('El documento ya está registrado');
     }
 
     try {
-      // 2. Crear usuario con detalle en una sola transacción (anidado)
+      // ✅ 3. Crear usuario con su detalle
       const user = await this.prismaService.user.create({
         data: {
           email: createUserDto.email,
+          password: createUserDto.password, // si aplica
           role: {
             connect: { id: createUserDto.roleId },
           },
@@ -53,12 +51,7 @@ export class UsersService {
               address: createUserDto.address,
               documentTypeId: createUserDto.documentTypeId,
               documentNumber: createUserDto.documentNumber,
-              assignments: createUserDto.assignmentIds?.length
-                ? {
-                  connect: createUserDto.assignmentIds.map((id) => ({ id })),
-                }
-                : undefined, // si no vienen asignaciones, no conecta nada
-              coustPerHour: createUserDto.coustPerHour,
+              birthDate: createUserDto.birthDate,
             },
           },
         },
@@ -67,30 +60,33 @@ export class UsersService {
           userDetail: {
             include: {
               documentType: true,
-              assignments: true, // incluye todas las asignaciones
+              userCostPerAssignment: true, // 👈 ya no es assignments
             },
           },
         },
       });
 
-      // 3. Generar código de verificación
+      // ✅ 4. Insertar costos por asignación si vienen en el DTO
+      if (createUserDto.userCostPerAssignment?.length) {
+        await this.prismaService.$transaction(
+          createUserDto.userCostPerAssignment.map(({ assignmentId, costPerHour }) =>
+            this.prismaService.userCostPerAssignment.create({
+              data: {
+                userDetailId: user.userDetail.id,
+                assignmentId,
+                costPerHour,
+              },
+            })
+          )
+        );
+      }
+
+      // ✅ 5. Crear el código de verificación
       await this.usersCodeVerifyService.createCode(user.id);
 
-      // 4. Retornar solo la información necesaria
-      return {
-        id: user.id,
-        email: user.email,
-        role: user.role.name,
-        names: user.userDetail?.names,
-        lastNames: user.userDetail?.lastNames,
-        phone: user.userDetail?.phone,
-        documentType: user.userDetail?.documentType?.name,
-        documentNumber: user.userDetail?.documentNumber,
-        assignments: user.userDetail?.assignments.map((a) => a.title) || [],
-        coustPerHour: user.userDetail?.coustPerHour,
-      };
+      return user;
     } catch (error) {
-      console.error('Error al crear el usuario:', error);
+      console.error('❌ Error al crear el usuario:', error);
       throw new InternalServerErrorException('No se pudo crear el usuario');
     }
   }
@@ -222,7 +218,11 @@ export class UsersService {
         userDetail: {
           include: {
             documentType: true,
-            assignments: true,
+            userCostPerAssignment: {
+              include: {
+                assignment: true,  // para obtener el título/nombre de la asignación
+              },
+            },
           },
         },
       },
@@ -232,11 +232,20 @@ export class UsersService {
     });
 
     // 🔒 Excluir password
-    const safeData = data.map(({ password, ...user }: any) => user);
+    const safeData = data.map(({ password, ...user }: any) => {
+      return {
+        ...user,
+        // 🔑 Mapear asignaciones con su costo por hora
+        assignments: user.userDetail.userCostPerAssignment.map((ucpa) => ({
+          assignmentId: ucpa.assignment.id,
+          assignmentTitle: ucpa.assignment.title,
+          costPerHour: ucpa.costPerHour,
+        })),
+      };
+    });
 
     // excluir el usuario autenticado
-    const userId = getUserId;
-    const filteredData = safeData.filter((user: any) => user.id !== userId);
+    const filteredData = safeData.filter((user: any) => user.id !== getUserId);
 
     return {
       data: filteredData,
@@ -327,7 +336,11 @@ export class UsersService {
         userDetail: {
           include: {
             documentType: true,
-            assignments: true,
+            userCostPerAssignment: {
+              include: {
+                assignment: true,
+              },
+            },
           },
         },
       },
@@ -342,46 +355,38 @@ export class UsersService {
   async findOne(id: number) {
     const user = await this.prismaService.user.findUnique({
       where: { id },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado.');
-    }
-
-    const userDetail = await this.prismaService.userDetail.findUnique({
-      where: { userId: id },
       include: {
-        documentType: true,
-        assignments: true,
+        userDetail: {
+          include: {
+            documentType: true,
+            userCostPerAssignment: { include: { assignment: true } },
+          },
+        },
+        role: true,
       },
     });
 
-    if (!userDetail) {
-      throw new NotFoundException('Detalles del usuario no encontrados.');
-    }
+    if (!user) throw new NotFoundException('Usuario no encontrado.');
 
-    // Combinar datos de user y userDetail
-    const combinedUser = {
-      ...user,
-      ...userDetail,
+    const { password, ...safeUser } = user;
+
+    // 🔑 Mapear asignaciones con su costo
+    return {
+      ...safeUser,
+      assignments: user.userDetail.userCostPerAssignment.map((ucpa) => ({
+        assignmentId: ucpa.assignment.id,
+        assignmentTitle: ucpa.assignment.title,
+        costPerHour: ucpa.costPerHour,
+      })),
     };
-
-    // Excluir password
-    const { password, ...safeUser } = combinedUser;
-
-    return safeUser;
   }
 
+
   async update(email: string, updateUserDto: UpdateUserDto) {
-    const user = await this.prismaService.user.findUnique({
-      where: { email },
-    });
+    const user = await this.prismaService.user.findUnique({ where: { email } });
+    if (!user) throw new NotFoundException('Usuario no encontrado.');
 
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado.');
-    }
-
-    return await this.prismaService.userDetail.update({
+    const updatedUser = await this.prismaService.userDetail.update({
       where: { userId: user.id },
       data: {
         names: updateUserDto.names,
@@ -390,20 +395,32 @@ export class UsersService {
         currentCityId: updateUserDto.currentCityId,
         address: updateUserDto.address,
         documentNumber: updateUserDto.documentNumber,
-        coustPerHour: updateUserDto.coustPerHour,
         birthDate: updateUserDto.birthDate,
-        // 🔑 manejar las asignaciones
-        assignments: updateUserDto.assignmentIds
-          ? {
-            set: updateUserDto.assignmentIds.map(id => ({ id })),
-          }
-          : undefined,
-      },
-      include: {
-        assignments: true,
       },
     });
+
+    // 🔑 Reemplazar las asignaciones con costo
+    if (updateUserDto.userCostPerAssignment && updateUserDto.userCostPerAssignment.length > 0) {
+      await this.prismaService.userCostPerAssignment.deleteMany({
+        where: { userDetailId: updatedUser.id },
+      });
+
+      await Promise.all(
+        updateUserDto.userCostPerAssignment.map(({ assignmentId, costPerHour }) =>
+          this.prismaService.userCostPerAssignment.create({
+            data: {
+              userDetailId: updatedUser.id,
+              assignmentId,
+              costPerHour,
+            },
+          })
+        )
+      );
+    }
+
+    return updatedUser;
   }
+
 
   async remove(id: number) {
     const user = await this.prismaService.user.findUnique({
@@ -435,19 +452,14 @@ export class UsersService {
         await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
       }
 
-      // Desconectar las asignaciones antes de borrar el detalle
-      await this.prismaService.userDetail.update({
-        where: { userId: id },
-        data: {
-          assignments: {
-            set: [], // elimina todas las relaciones en _UserDetailAssignments
-          },
-        },
-      });
-
       // Eliminar el detalle del usuario
       await this.prismaService.userDetail.delete({
         where: { userId: id },
+      });
+
+      // Borrar relaciones en userCostPerAssignment
+      await this.prismaService.userCostPerAssignment.deleteMany({
+        where: { userDetailId: getDetailUser.id },
       });
 
       // Finalmente eliminar el usuario

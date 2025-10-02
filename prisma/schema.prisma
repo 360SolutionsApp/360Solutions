@@ -45,10 +45,24 @@ model UserDetail {
   currentCityId       Int?
   applicationCvUrl    String?
   socialSecurityUrl   String?
-  coustPerHour        Int?
+
   documentType        DocumentType? @relation(fields: [documentTypeId], references: [id])
   user                User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
-  assignments         Assignment[]  @relation("UserDetailAssignments")
+  
+  userCostPerAssignment userCostPerAssignment[]
+}
+
+model userCostPerAssignment {
+  id           Int        @id @default(autoincrement())
+  userDetailId Int
+  userDetail   UserDetail @relation(fields: [userDetailId], references: [id], onDelete: Cascade)
+
+  assignmentId Int
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  costPerHour Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model UserVerification {
@@ -86,10 +100,11 @@ model Assignment {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   assignmentType Int
-  users          UserDetail[] @relation("UserDetailAssignments")
 
   workOrder                      workOrder[]                      @relation("assigmentWorkOrder")
   assignmentQuantityForWorkOrder assignmentQuantityForWorkOrder[]
+
+  userCostPerAssignment userCostPerAssignment[]
 }
 
 model ClientCompany {
@@ -106,6 +121,8 @@ model ClientCompany {
   updatedAt                    DateTime? @updatedAt
 
   ContractClient ContractClient[]
+
+  workOrder workOrder[]
 }
 
 model ContractClient {
@@ -129,10 +146,12 @@ model ContractClient {
 
 enum WorkOrderStatus {
   PENDING // 1
-  RUNNING // 2
-  CLOSED // 3
-  CANCELED // 4
-  INACTIVE // 5
+  PARTIALLY_RUNNING // 2
+  RUNNING // 3
+  PARTIALLY_CLOSED // 4
+  CLOSED // 5
+  CANCELED // 6
+  INACTIVE // 7
 }
 
 model workOrder {
@@ -140,6 +159,11 @@ model workOrder {
 
   assigmentsClientReq  Assignment[]                     @relation("assigmentWorkOrder")
   assignmentQuantities assignmentQuantityForWorkOrder[]
+
+  workOrderStartDate DateTime? @default(now())
+  workOrderEndDate   DateTime? @default(now())
+  orderWorkHourStart String?
+  workOrderCodePo    String?
 
   supervisorUserId Int
   supervisorUser   User @relation(fields: [supervisorUserId], references: [id], onDelete: Restrict)
@@ -150,6 +174,9 @@ model workOrder {
   updatedAt         DateTime?       @updatedAt
   ContractClient    ContractClient? @relation(fields: [contractClientId], references: [id], onDelete: Restrict)
   contractClientId  Int?
+
+  clientId      Int?
+  clientCompany ClientCompany? @relation(fields: [clientId], references: [id], onDelete: Restrict)
 
   orderAssignToCollab orderAssignToCollabs[]
 
@@ -176,10 +203,10 @@ model orderAssignToCollabs {
   workOrderId Int
   workOrder   workOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
 
-  orderWorkDateStart DateTime @default(now())
-  orderWorkDateEnd   DateTime @default(now())
+  orderWorkDateStart DateTime? @default(now())
+  orderWorkDateEnd   DateTime? @default(now())
 
-  orderWorkHourStart String
+  orderWorkHourStart String?
   orderLocationWork  String
   orderObservations  String
 
