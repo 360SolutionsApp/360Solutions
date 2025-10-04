@@ -55,7 +55,7 @@ export class WorkOrdersService {
       include: {
         clientCompany: true,
         assigmentsClientReq: true,
-        supervisorUser: { select: { id: true, email: true, userDetail: true } }, // 🔒
+        supervisorUser: { select: { id: true, email: true, userDetail: true } }, //
         assignmentQuantities: {
           include: {
             assignment: { select: { id: true, title: true, costPerHour: true } },
@@ -109,6 +109,38 @@ export class WorkOrdersService {
       };
     }
 
+    const commonInclude = {
+      clientCompany: true,
+
+      // 🔒 SupervisorUser sin password
+      supervisorUser: {
+        select: {
+          id: true,
+          email: true,
+          roleId: true,
+          userDetail: true, // ⬅️ Incluye el detalle del supervisor
+        },
+      },
+
+      assignmentQuantities: {
+        include: {
+          assignment: true,
+        },
+      },
+
+      orderAssignToCollab: {
+        include: {
+          worksAssigned: {
+            include: {
+              collaborator: {
+                select: { id: true, email: true }, // 🔒
+              },
+            },
+          },
+        },
+      },
+    };
+
     if (page && limit) {
       const [orders, total] = await this.prisma.$transaction([
         this.prisma.workOrder.findMany({
@@ -116,19 +148,7 @@ export class WorkOrdersService {
           skip,
           take: limit,
           orderBy: { createdAt: 'desc' },
-          include: {
-            clientCompany: true,
-            supervisorUser: { select: { id: true, email: true, roleId: true } }, // 🔒
-            orderAssignToCollab: {
-              include: {
-                worksAssigned: {
-                  include: {
-                    collaborator: { select: { id: true, email: true } }, // 🔒
-                  },
-                },
-              },
-            },
-          },
+          include: commonInclude,
         }),
         this.prisma.workOrder.count({ where: whereCondition }),
       ]);
@@ -142,21 +162,10 @@ export class WorkOrdersService {
     return this.prisma.workOrder.findMany({
       where: whereCondition,
       orderBy: { createdAt: 'desc' },
-      include: {
-        clientCompany: true,
-        supervisorUser: { select: { id: true, email: true, roleId: true } }, // 🔒
-        orderAssignToCollab: {
-          include: {
-            worksAssigned: {
-              include: {
-                collaborator: { select: { id: true, email: true } }, // 🔒
-              },
-            },
-          },
-        },
-      },
+      include: commonInclude,
     });
   }
+
 
   // Obtener una WorkOrder por ID
   async findOne(id: number) {
@@ -213,19 +222,17 @@ export class WorkOrdersService {
       return await this.prisma.workOrder.update({
         where: { id },
         data: {
-          clientId: clientId ?? null,
-          workOrderStatus,
-          workOrderStartDate: workOrderStartDate ?? null,
-          workOrderEndDate: workOrderEndDate ?? null,
-          orderWorkHourStart: orderWorkHourStart ?? null,
-          workOrderCodePo: workOrderCodePo ?? null,
-
-          assigmentsClientReq: assigmentsClientReq
-            ? { set: assigmentsClientReq.map((assignmentId) => ({ id: assignmentId })) }
-            : undefined,
-
-          assignmentQuantities: assignmentQuantities
-            ? {
+          ...(clientId !== undefined && { clientId }),
+          ...(workOrderStatus !== undefined && { workOrderStatus }),
+          ...(workOrderStartDate !== undefined && { workOrderStartDate }),
+          ...(workOrderEndDate !== undefined && { workOrderEndDate }),
+          ...(orderWorkHourStart !== undefined && { orderWorkHourStart }),
+          ...(workOrderCodePo !== undefined && { workOrderCodePo }),
+          ...(assigmentsClientReq && {
+            assigmentsClientReq: { set: assigmentsClientReq.map(id => ({ id })) },
+          }),
+          ...(assignmentQuantities && {
+            assignmentQuantities: {
               update: assignmentQuantities
                 .filter((a) => a.id)
                 .map((a) => ({
@@ -241,8 +248,8 @@ export class WorkOrdersService {
               deleteMany: {
                 id: { notIn: assignmentQuantities.filter((a) => a.id).map((a) => a.id) },
               },
-            }
-            : undefined,
+            },
+          }),
         },
         include: {
           clientCompany: true,
