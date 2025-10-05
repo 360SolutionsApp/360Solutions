@@ -201,11 +201,12 @@ export class WorkOrdersService {
 
   // Actualizar WorkOrder
   async update(id: number, dto: UpdateWorkOrderDto, userEmail: string) {
-    const existingUser = await this.prisma.user.findUnique({
+    // 🔎 Verificar usuario
+    const user = await this.prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, email: true }, // 🔒
+      select: { id: true },
     });
-    if (!existingUser) throw new NotFoundException('El usuario no existe');
+    if (!user) throw new NotFoundException('El usuario no existe');
 
     const {
       workOrderStatus,
@@ -228,26 +229,22 @@ export class WorkOrdersService {
           ...(workOrderEndDate !== undefined && { workOrderEndDate }),
           ...(orderWorkHourStart !== undefined && { orderWorkHourStart }),
           ...(workOrderCodePo !== undefined && { workOrderCodePo }),
+
+          // Reemplaza completamente las asignaciones de cliente
           ...(assigmentsClientReq && {
-            assigmentsClientReq: { set: assigmentsClientReq.map(id => ({ id })) },
+            assigmentsClientReq: {
+              set: assigmentsClientReq.map(id => ({ id })),
+            },
           }),
+
+          // Reemplaza completamente las cantidades de asignaciones
           ...(assignmentQuantities && {
             assignmentQuantities: {
-              update: assignmentQuantities
-                .filter((a) => a.id)
-                .map((a) => ({
-                  where: { id: a.id },
-                  data: { quantityWorkers: a.quantityWorkers },
-                })),
-              create: assignmentQuantities
-                .filter((a) => !a.id)
-                .map((a) => ({
-                  assignmentId: a.assignmentId,
-                  quantityWorkers: a.quantityWorkers,
-                })),
-              deleteMany: {
-                id: { notIn: assignmentQuantities.filter((a) => a.id).map((a) => a.id) },
-              },
+              deleteMany: {}, // borra todas las existentes
+              create: assignmentQuantities.map(a => ({
+                assignmentId: a.assignmentId,
+                quantityWorkers: a.quantityWorkers,
+              })),
             },
           }),
         },
@@ -256,7 +253,9 @@ export class WorkOrdersService {
           assigmentsClientReq: true,
           assignmentQuantities: {
             include: {
-              assignment: { select: { id: true, title: true, costPerHour: true } },
+              assignment: {
+                select: { id: true, title: true, costPerHour: true },
+              },
             },
           },
         },
