@@ -26,16 +26,6 @@ export class CheckInCheckOutService {
     console.log('Colaboradores asignados:', orderId, assignedCollabsOrder);
 
     if (checkType === CheckType.IN) {
-      // Basados en los IDs de los colaboradores, verificamos cuantos han hecho check-in
-      const checkInsCount = await this.prisma.checkIn.count({
-        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
-      });
-
-      console.log('Check-ins encontrados:', checkInsCount);
-
-      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
-      console.log('colaboradores que ya han hecho check-out en esta orden.', checkInsCount, assignedCollabsOrder.length);
-
       // Verificar si el colaborador ya hizo check-in en esta orden
       const existingCheckInForUser = await this.prisma.checkIn.findFirst({
         where: { orderId, userCollabId },
@@ -55,8 +45,15 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Contar cuántos colaboradores han hecho check-in
-      //const checkInsCount = await this.prisma.checkIn.count({ where: { orderId } });
+      // Contar cuántos colaboradores han hecho check-in (ahora incluye al nuevo check-in)
+      const checkInsCount = await this.prisma.checkIn.count({
+        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+      });
+
+      console.log('Check-ins encontrados:', checkInsCount);
+
+      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
+      console.log('colaboradores que ya han hecho check-in en esta orden.', checkInsCount, assignedCollabsOrder.length);
 
       // Actualizar estado de la orden
       let newStatus: WorkOrderStatus;
@@ -76,22 +73,13 @@ export class CheckInCheckOutService {
     }
 
     else if (checkType === CheckType.OUT) {
-      const checkOutsCount = await this.prisma.checkOut.count({
-        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
-      });
-
-      console.log('Check-ins encontrados:', checkOutsCount);
-
-      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
-      console.log('colaboradores que ya han hecho check-in en esta orden.', checkOutsCount, assignedCollabsOrder.length);
-
       // Verificar si el colaborador ya hizo check-out en esta orden
       const existingCheckOutForUser = await this.prisma.checkOut.findFirst({
         where: { orderId, userCollabId },
       });
 
       if (existingCheckOutForUser) {
-        throw new BadRequestException('Este colaborador ya hizo check-Out en esta orden.');
+        throw new BadRequestException('Este colaborador ya hizo check-out en esta orden.');
       }
 
       // Crear registro de check-out
@@ -104,8 +92,15 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Contar cuántos colaboradores han hecho check-out
-      //const checkOutsCount = await this.prisma.checkOut.count({ where: { orderId } });
+      // Contar cuántos colaboradores han hecho check-out (ahora incluye al nuevo check-out)
+      const checkOutsCount = await this.prisma.checkOut.count({
+        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+      });
+
+      console.log('Check-outs encontrados:', checkOutsCount);
+
+      // Comparamos si la cantidad de check-outs es igual a la cantidad de colaboradores asignados
+      console.log('colaboradores que ya han hecho check-out en esta orden.', checkOutsCount, assignedCollabsOrder.length);
 
       // Actualizar estado de la orden
       let newStatus: WorkOrderStatus;
@@ -123,6 +118,7 @@ export class CheckInCheckOutService {
 
       return checkOut;
     }
+
 
     else {
       throw new BadRequestException('Tipo de registro inválido. Use IN o OUT.');
