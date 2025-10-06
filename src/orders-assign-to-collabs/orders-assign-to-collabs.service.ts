@@ -42,7 +42,7 @@ export class OrdersAssignToCollabsService {
     const users = await this.prisma.user.findMany({
       where: {
         id: { in: collaboratorIds },
-        roleId: 5, // 👈 tu rol de "colaborador"
+        roleId: 5, // 👈 rol "colaborador"
         isVerified: true,
       },
     });
@@ -61,16 +61,13 @@ export class OrdersAssignToCollabsService {
             collaboratorId: { in: collaboratorIds },
           },
         },
-        // Validación por traslape de rango de fechas
         AND: [
           {
-            // ⚡ Solo considerar órdenes que caen en el mismo día o rango
             orderWorkDateStart: { lte: endDate },
             orderWorkDateEnd: { gte: startDate },
           },
         ],
-        // ⚡ Validar hora solo si es el mismo día
-        ...(startDate.toISOString().split("T")[0] === endDate.toISOString().split("T")[0]
+        ...(startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0]
           ? { orderWorkHourStart: orderWorkHourStart }
           : {}),
       },
@@ -80,22 +77,18 @@ export class OrdersAssignToCollabsService {
     });
 
     if (conflictingAssignments.length > 0) {
-      // Obtener los colaboradores que tienen conflicto
-      const conflictingCollaborators = conflictingAssignments.flatMap(
-        (assignment) =>
-          assignment.worksAssigned
-            .filter((work) => collaboratorIds.includes(work.collaboratorId))
-            .map((work) => work.collaboratorId),
+      const conflictingCollaborators = conflictingAssignments.flatMap((assignment) =>
+        assignment.worksAssigned
+          .filter((work) => collaboratorIds.includes(work.collaboratorId))
+          .map((work) => work.collaboratorId),
       );
 
-      // traer el detalle de los colaboradores que tienen conflicto
       const conflictingCollaboratorsDetails = await this.prisma.userDetail.findMany({
         where: {
           userId: { in: conflictingCollaborators },
         },
       });
 
-      // listar los colaboradores que tienen conflicto
       const conflictingCollaboratorsNames = conflictingCollaboratorsDetails
         .map((detail) => `${detail.names} ${detail.lastNames}`)
         .join(', ');
@@ -106,6 +99,7 @@ export class OrdersAssignToCollabsService {
     }
 
     try {
+      // Crear la asignación de la orden con los colaboradores
       const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
           workOrderId,
@@ -152,34 +146,36 @@ export class OrdersAssignToCollabsService {
       });
 
       // Extraemos los correos de los colaboradores
-      const emails = newAssignment.worksAssigned.map(
-        (work) => work.collaborator.email,
-      );
+      const emails = newAssignment.worksAssigned.map((work) => work.collaborator.email);
 
-      // Extraemos el contractCode de la orden de trabajo
-      const contract = await this.prisma.contractClient.findUnique({
-        where: { id: order.contractClientId },
-      });
+      // Obtener el companyName a partir de order.clientId (ya no usamos contratos)
+      let companyName = 'N/A';
+      if (order.clientId) {
+        const company = await this.prisma.clientCompany.findUnique({
+          where: { id: order.clientId },
+        });
+        companyName = company?.companyName ?? 'N/A';
+      }
 
-      // Extraemos el nombre de la compañía por el id del contratante
-      const company = await this.prisma.clientCompany.findUnique({
-        where: { id: contract.clientId },
-      });
+      // Usar el workOrderCodePo de la orden si existe
+      const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
       // Extraemos el detalle del supervisor
       const supervisor = await this.prisma.user.findUnique({
         where: { id: order.supervisorUserId },
-        include: {
-          userDetail: true,
-        },
+        include: { userDetail: true },
       });
 
-      // Enviar correo de reporte
+      // Preparar texto del supervisor (seguro manejar cuando no haya userDetail)
+      const supervisorName =
+        supervisor?.userDetail ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}` : supervisor?.email ?? 'N/A';
+
+      // Enviar correo de reporte a los colaboradores
       await this.reportEmailService.sendAssignmentsToCollabs(
         emails,
-        contract.contractCodePo,
-        company.companyName,
-        supervisor.userDetail.names + ' ' + supervisor.userDetail.lastNames,
+        orderCodePo,
+        companyName,
+        supervisorName,
         startDate.toISOString().split('T')[0],
         orderWorkHourStart,
         orderLocationWork,
@@ -187,40 +183,41 @@ export class OrdersAssignToCollabsService {
         true, // usar Zoho API
       );
 
-      // Extraemos la lista de colaboradores
+      // Extraemos la lista de colaboradores con sus asignaciones (títulos)
       const collaborators = newAssignment.worksAssigned.map((work) => ({
         name:
-          work.collaborator.userDetail.names +
-          ' ' +
-          work.collaborator.userDetail.lastNames,
+          work.collaborator.userDetail?.names
+            ? `${work.collaborator.userDetail.names} ${work.collaborator.userDetail.lastNames}`
+            : work.collaborator.email,
         email: work.collaborator.email,
-        assignments: work.collaborator.userDetail.userCostPerAssignment.map(
-          (cost) => cost.assignment.title   // ahora obtenemos el nombre de la asignación
+        assignments: (work.collaborator.userDetail?.userCostPerAssignment || []).map(
+          (cost) => cost.assignment.title,
         ),
       }));
 
       // Enviar correo al supervisor con la lista de colaboradores asignados
-      await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
-        supervisor.email,
-        contract.contractCodePo,
-        company.companyName,
-        startDate.toISOString().split('T')[0],
-        orderWorkHourStart,
-        orderLocationWork,
-        orderObservations,
-        collaborators,
-
-      );
+      if (supervisor?.email) {
+        await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
+          supervisor.email,
+          orderCodePo,
+          companyName,
+          startDate.toISOString().split('T')[0],
+          orderWorkHourStart,
+          orderLocationWork,
+          orderObservations,
+          collaborators,
+        );
+      }
 
       return newAssignment;
     } catch (error) {
+      // opcional: loguear error para debugging
+      console.error('Error creando assignment to collabs:', error);
       throw new BadRequestException(
-        error.message ||
-        'Error al crear la asignación del usuario a la orden de trabajo',
+        error.message || 'Error al crear la asignación del usuario a la orden de trabajo',
       );
     }
   }
-
 
   // Listemos todos los usuarios no asignados a una orden
   async findAllUnassignedUsers(workOrderId: number) {
@@ -312,6 +309,15 @@ export class OrdersAssignToCollabsService {
             ContractClient: {
               include: {
                 client: true,
+              },
+            },
+            clientCompany: {
+              select: {
+                id: true,
+                companyName: true,
+                employerPhone: true,
+                clientAddress: true,
+                employerEmail: true,                
               },
             },
             supervisorUser: {

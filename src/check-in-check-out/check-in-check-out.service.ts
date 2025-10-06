@@ -203,6 +203,64 @@ export class CheckInCheckOutService {
     return { checkIn, checkOut };
   }
 
+  // Listar todas las ordenes con sus respectivos colaboradores que han hecho checkin y los que no
+  // y ordenar las ordenes por fecha de inicio descendente con páginación 
+  async listOrdersWithCheckInStatus(page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const workOrders = await this.prisma.workOrder.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+      orderAssignToCollab: {
+        include: {
+        worksAssigned: {
+          include: {
+          collaborator: {
+            select: {
+            id: true,
+            email: true,
+            userDetail: true,
+            },
+          },
+          },
+        },
+        },
+      },
+      checkIn: {
+        select: {
+        userCollabId: true,
+        },
+      },
+      },
+    });
+
+    // Map workOrders to include check-in status for each collaborator
+    for (const wo of workOrders) {
+      (wo as any).collaborators = [];
+      const checkedInIds = wo.checkIn.map((ci) => ci.userCollabId);
+      for (const assign of wo.orderAssignToCollab) {
+        for (const wa of assign.worksAssigned) {
+          (wo as any).collaborators.push({
+            ...wa.collaborator,
+            hasCheckedIn: checkedInIds.includes(wa.collaborator.id),
+          });
+        }
+      }
+      // Optionally, remove raw relations to clean up response
+      delete wo.orderAssignToCollab;
+      delete wo.checkIn;
+    }
+    return {
+      workOrders,
+      pagination: {
+        page,
+        limit,
+        total: await this.prisma.workOrder.count(),
+      },
+    };
+  }
+
   async remove(id: number) {
     await this.prisma.checkIn.deleteMany({ where: { id } });
     await this.prisma.checkOut.deleteMany({ where: { id } });

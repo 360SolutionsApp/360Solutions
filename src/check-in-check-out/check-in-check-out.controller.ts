@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, ParseIntPipe, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, ParseIntPipe, BadRequestException, Query } from '@nestjs/common';
 import { CheckInCheckOutService } from './check-in-check-out.service';
 import { CreateCheckInCheckOutDto } from './dto/create-check-in-check-out.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -44,6 +44,20 @@ export class CheckInCheckOutController {
   @Get()
   findAll() {
     return this.checkInCheckOutService.findAll();
+  }
+
+  /**
+   * GET /check-in-check-out/with-checkin-status?page=1&limit=10
+   * Lista las órdenes del día con colaboradores + estado checkin/checkout (paginado)
+   */
+  @Get('/with-checkin-status')
+  async getOrdersWithCheckInStatus(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+  ) {
+    const pageNumber = Math.max(Number(page) || 1, 1);
+    const limitNumber = Math.max(Number(limit) || 10, 1);
+    return this.checkInCheckOutService.listOrdersWithCheckInStatus(pageNumber, limitNumber);
   }
 
   @Get(':id')
