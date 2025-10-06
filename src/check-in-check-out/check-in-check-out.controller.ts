@@ -1,9 +1,10 @@
 /* eslint-disable prettier/prettier */
-import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, ParseIntPipe, BadRequestException, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseInterceptors, UploadedFiles, ParseIntPipe, BadRequestException, Query, UseGuards, Req } from '@nestjs/common';
 import { CheckInCheckOutService } from './check-in-check-out.service';
 import { CreateCheckInCheckOutDto } from './dto/create-check-in-check-out.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { CheckInCheckOutAttachmentService } from './checkInCheckOutAttachment.service';
+import { JwtAuthGuard } from 'src/auth/auth.guard';
 //import { UpdateCheckInCheckOutDto } from './dto/update-check-in-check-out.dto';
 
 @Controller('check-in-check-out')
@@ -60,14 +61,16 @@ export class CheckInCheckOutController {
     return this.checkInCheckOutService.listOrdersWithCheckInStatus(pageNumber, limitNumber);
   }
 
-  @Get(':id')
+  @Get(':id') 
   findOne(@Param('id') id: string) {
     return this.checkInCheckOutService.findOne(+id);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('/orderId/:orderId')
-  findByOrderId(@Param('orderId') orderId: string) {
-    return this.checkInCheckOutService.findByOrderId(+orderId);
+  findByOrderId(@Param('orderId') orderId: string, @Req() req: any) {
+    const userId = req.user.id; // <- viene del payload del JWT
+    return this.checkInCheckOutService.findByOrderId(+orderId, userId);
   }
 
   /*

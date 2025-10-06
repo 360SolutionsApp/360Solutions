@@ -12,16 +12,30 @@ export class CheckInCheckOutService {
   async create(dto: CreateCheckInCheckOutDto) {
     const { checkType, orderId, userCollabId, time, status } = dto;
 
-    // Obtener colaboradores asignados a la orden
+    // Obtenemos la orden asignada
     const assignedCollabs = await this.prisma.orderAssignToCollabs.findMany({
       where: { workOrderId: orderId },
     });
 
-    if (assignedCollabs.length === 0) {
-      throw new BadRequestException('La orden de trabajo no tiene colaboradores asignados.');
-    }
+    // Obtenemos los IDs de los colaboradores asignados
+    const assignedCollabsOrder = await this.prisma.workersAssignToOrder.findMany({
+      where: { orderAssignToCollabId: { in: assignedCollabs.map(c => c.id) } },
+      select: { collaboratorId: true },
+    });
+
+    console.log('Colaboradores asignados:', orderId, assignedCollabsOrder);
 
     if (checkType === CheckType.IN) {
+      // Basados en los IDs de los colaboradores, verificamos cuantos han hecho check-in
+      const checkInsCount = await this.prisma.checkIn.count({
+        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+      });
+
+      console.log('Check-ins encontrados:', checkInsCount);
+
+      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
+      console.log('colaboradores que ya han hecho check-out en esta orden.', checkInsCount, assignedCollabsOrder.length);
+
       // Verificar si el colaborador ya hizo check-in en esta orden
       const existingCheckInForUser = await this.prisma.checkIn.findFirst({
         where: { orderId, userCollabId },
@@ -42,12 +56,12 @@ export class CheckInCheckOutService {
       });
 
       // Contar cuántos colaboradores han hecho check-in
-      const checkInsCount = await this.prisma.checkIn.count({ where: { orderId } });
+      //const checkInsCount = await this.prisma.checkIn.count({ where: { orderId } });
 
       // Actualizar estado de la orden
       let newStatus: WorkOrderStatus;
 
-      if (checkInsCount === assignedCollabs.length) {
+      if (checkInsCount === assignedCollabsOrder.length) {
         newStatus = WorkOrderStatus.RUNNING; // Todos hicieron check-in
       } else {
         newStatus = WorkOrderStatus.PARTIALLY_RUNNING; // Al menos uno, pero no todos
@@ -62,13 +76,22 @@ export class CheckInCheckOutService {
     }
 
     else if (checkType === CheckType.OUT) {
+      const checkOutsCount = await this.prisma.checkOut.count({
+        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+      });
+
+      console.log('Check-ins encontrados:', checkOutsCount);
+
+      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
+      console.log('colaboradores que ya han hecho check-in en esta orden.', checkOutsCount, assignedCollabsOrder.length);
+
       // Verificar si el colaborador ya hizo check-out en esta orden
       const existingCheckOutForUser = await this.prisma.checkOut.findFirst({
         where: { orderId, userCollabId },
       });
 
       if (existingCheckOutForUser) {
-        throw new BadRequestException('Este colaborador ya hizo check-out en esta orden.');
+        throw new BadRequestException('Este colaborador ya hizo check-Out en esta orden.');
       }
 
       // Crear registro de check-out
@@ -82,12 +105,12 @@ export class CheckInCheckOutService {
       });
 
       // Contar cuántos colaboradores han hecho check-out
-      const checkOutsCount = await this.prisma.checkOut.count({ where: { orderId } });
+      //const checkOutsCount = await this.prisma.checkOut.count({ where: { orderId } });
 
       // Actualizar estado de la orden
       let newStatus: WorkOrderStatus;
 
-      if (checkOutsCount === assignedCollabs.length) {
+      if (checkOutsCount === assignedCollabsOrder.length) {
         newStatus = WorkOrderStatus.CLOSED; // Todos hicieron check-out
       } else {
         newStatus = WorkOrderStatus.PARTIALLY_CLOSED; // Algunos han hecho check-out, pero no todos
@@ -197,10 +220,32 @@ export class CheckInCheckOutService {
   }
 
   // Obtener el CheckIn/Checkout según el id de la orden de trabajo
-  async findByOrderId(orderId: number) {
-    const checkIn = await this.prisma.checkIn.findFirst({ where: { orderId } });
-    const checkOut = await this.prisma.checkOut.findFirst({ where: { orderId } });
-    return { checkIn, checkOut };
+  async findByOrderId(orderId: number, userId: number) {
+
+    // Obtenemos el check-in de este usuario en esta orden
+    const checkIn = await this.prisma.checkIn.findFirst({
+      where: { orderId, userCollabId: userId },
+      include: {
+        userCollab: { select: { id: true, email: true, userDetail: true } },
+        order: true,
+      },
+    });
+
+    // Obtenemos el check-out de este usuario en esta orden
+    const checkOut = await this.prisma.checkOut.findFirst({
+      where: { orderId, userCollabId: userId },
+      include: {
+        userCollab: { select: { id: true, email: true, userDetail: true } },
+        order: true,
+      },
+    });
+
+    // Retornamos ambos registros (puede que uno sea null si no se ha hecho)
+    return {
+      checkIn: checkIn,
+      checkOut: checkOut,
+    };
+
   }
 
   // Listar todas las ordenes con sus respectivos colaboradores que han hecho checkin y los que no
@@ -212,26 +257,26 @@ export class CheckInCheckOutService {
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-      orderAssignToCollab: {
-        include: {
-        worksAssigned: {
+        orderAssignToCollab: {
           include: {
-          collaborator: {
-            select: {
-            id: true,
-            email: true,
-            userDetail: true,
+            worksAssigned: {
+              include: {
+                collaborator: {
+                  select: {
+                    id: true,
+                    email: true,
+                    userDetail: true,
+                  },
+                },
+              },
             },
           },
+        },
+        checkIn: {
+          select: {
+            userCollabId: true,
           },
         },
-        },
-      },
-      checkIn: {
-        select: {
-        userCollabId: true,
-        },
-      },
       },
     });
 

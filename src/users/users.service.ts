@@ -74,7 +74,7 @@ export class UsersService {
               data: {
                 userDetailId: user.userDetail.id,
                 assignmentId,
-                costPerHour,
+                costPerHour: typeof costPerHour === 'string' ? parseInt(costPerHour, 10) : costPerHour,
               },
             })
           )
@@ -235,7 +235,7 @@ export class UsersService {
     const safeData = data.map(({ password, ...user }: any) => {
       return {
         ...user,
-        // 🔑 Mapear asignaciones con su costo por hora
+        // Mapear asignaciones con su costo por hora
         assignments: user.userDetail.userCostPerAssignment.map((ucpa) => ({
           assignmentId: ucpa.assignment.id,
           assignmentTitle: ucpa.assignment.title,
@@ -270,7 +270,7 @@ export class UsersService {
     const page = params.page ? Number(params.page) : undefined;
     const limit = params.limit ? Number(params.limit) : undefined;
 
-    // 📌 Sin paginación → devolver solo el array
+    // Sin paginación → devolver solo el array
     if (!page || !limit) {
       const allUsers = await this.prismaService.user.findMany({
         where: whereCondition,
@@ -285,7 +285,7 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
       });
 
-      // 🔒 Excluir password y usuario autenticado
+      // Excluir password y usuario autenticado
       return allUsers
         .map(({ password, ...user }: any) => user)
         .filter((user: any) => user.id !== userId);
@@ -313,7 +313,7 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 🔒 Excluir password y usuario autenticado
+    // Excluir password y usuario autenticado
     const safeData = data
       .map(({ password, ...user }: any) => user)
       .filter((user: any) => user.id !== userId);
@@ -370,7 +370,7 @@ export class UsersService {
 
     const { password, ...safeUser } = user;
 
-    // 🔑 Mapear asignaciones con su costo
+    // Mapear asignaciones con su costo
     return {
       ...safeUser,
       assignments: user.userDetail.userCostPerAssignment.map((ucpa) => ({
@@ -399,7 +399,7 @@ export class UsersService {
       },
     });
 
-    // 🔑 Reemplazar las asignaciones con costo
+    // Reemplazar las asignaciones con costo
     if (updateUserDto.userCostPerAssignment && updateUserDto.userCostPerAssignment.length > 0) {
       await this.prismaService.userCostPerAssignment.deleteMany({
         where: { userDetailId: updatedUser.id },
