@@ -302,6 +302,53 @@ export class CheckInCheckOutService {
     };
   }
 
+
+  // Listar los colaboradores asignados a una orden con su estado de check-in y check-out
+  // Listar los colaboradores asignados así no hayan hecho check-in o check-out pero mostrar el estado de la orden
+  async listCollaboratorsWithCheckInStatus(workOrderId: number) {
+    // Obtener la orden de trabajo con sus colaboradores asignados
+    const workOrder = await this.prisma.workOrder.findUnique({
+      where: { id: workOrderId },
+      include: {
+        orderAssignToCollab: {
+          include: {
+            worksAssigned: {
+              include: {
+                collaborator: {
+                  select: {
+                    id: true,
+                    email: true,
+                    userDetail: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!workOrder) {
+      throw new BadRequestException(`No se encontró la orden de trabajo con id ${workOrderId}`);
+    }
+
+    // Map workOrder to include check-in and check-out status for each collaborator
+    for (const assign of workOrder.orderAssignToCollab) {
+      for (const wa of assign.worksAssigned) {
+        // Buscar si este colaborador tiene check-in
+        const checkIn = await this.prisma.checkIn.findFirst({
+          where: { orderId: workOrderId, userCollabId: wa.collaborator.id },
+        });
+        // Buscar si este colaborador tiene check-out
+        const checkOut = await this.prisma.checkOut.findFirst({
+          where: { orderId: workOrderId, userCollabId: wa.collaborator.id },
+        });
+        (wa.collaborator as any).hasCheckedIn = !!checkIn;
+        (wa.collaborator as any).hasCheckedOut = !!checkOut;
+      }
+    }
+    return workOrder;
+  }
+
   async remove(id: number) {
     await this.prisma.checkIn.deleteMany({ where: { id } });
     await this.prisma.checkOut.deleteMany({ where: { id } });

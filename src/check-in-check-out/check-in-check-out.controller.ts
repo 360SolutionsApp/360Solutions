@@ -61,9 +61,9 @@ export class CheckInCheckOutController {
     return this.checkInCheckOutService.listOrdersWithCheckInStatus(pageNumber, limitNumber);
   }
 
-  @Get(':id') 
-  findOne(@Param('id') id: string) {
-    return this.checkInCheckOutService.findOne(+id);
+  @Get('/collaborators/:workOrderId')
+  listCollaboratorsWithCheckInStatus(@Param('workOrderId') workOrderId: string) {
+    return this.checkInCheckOutService.listCollaboratorsWithCheckInStatus(+workOrderId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -72,6 +72,15 @@ export class CheckInCheckOutController {
     const userId = req.user.id; // <- viene del payload del JWT
     return this.checkInCheckOutService.findByOrderId(+orderId, userId);
   }
+
+  @Get(':id') 
+  findOne(@Param('id') id: string) {
+    return this.checkInCheckOutService.findOne(+id);
+  }
+
+  
+
+  
 
   /*
     @Patch(':id')

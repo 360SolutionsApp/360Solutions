@@ -76,12 +76,32 @@ export class OrdersAssignToCollabsService {
       },
     });
 
+    console.log('Asignaciones conflictivas encontradas:', conflictingAssignments);
+
+    // validar que los colaboradores no tengan ordenes por cerrar
+    const ordersToClose = await this.prisma.workersAssignToOrder.findMany({
+      where: {
+        collaboratorId: { in: collaboratorIds },
+        orderAssignToCollab: {
+          orderWorkDateStart: { lte: endDate },
+          orderWorkDateEnd: { gte: startDate },
+          ...(startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0]
+            ? { orderWorkHourStart: orderWorkHourStart }
+            : {}),
+        },
+      },      
+    });
+
+    console.log('Órdenes por cerrar encontradas:', ordersToClose);
+
     if (conflictingAssignments.length > 0) {
       const conflictingCollaborators = conflictingAssignments.flatMap((assignment) =>
         assignment.worksAssigned
           .filter((work) => collaboratorIds.includes(work.collaboratorId))
           .map((work) => work.collaboratorId),
       );
+
+      console.log('Colaboradores con conflictos:', conflictingCollaborators);
 
       const conflictingCollaboratorsDetails = await this.prisma.userDetail.findMany({
         where: {
