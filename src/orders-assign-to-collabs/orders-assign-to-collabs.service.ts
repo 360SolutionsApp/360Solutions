@@ -29,13 +29,13 @@ export class OrdersAssignToCollabsService {
     const startDate = new Date(orderWorkDateStart);
     const endDate = new Date(orderWorkDateEnd);
 
-    // ✅ Validar existencia de la orden
+    // Validar existencia de la orden
     const order = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
     });
     if (!order) throw new BadRequestException('La orden de trabajo no existe');
 
-    // ✅ Validar colaboradores válidos
+    // Validar colaboradores válidos
     const users = await this.prisma.user.findMany({
       where: {
         id: { in: collaboratorIds },
@@ -51,7 +51,7 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    // ✅ Verificar si los colaboradores tienen órdenes activas (no cerradas)
+    // Verificar si los colaboradores tienen órdenes activas (no cerradas)
     const activeAssignments = await this.prisma.workersAssignToOrder.findMany({
       where: {
         collaboratorId: { in: collaboratorIds },
@@ -96,7 +96,7 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    // ✅ Crear asignación
+    // Crear asignación
     try {
       const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
@@ -136,7 +136,7 @@ export class OrdersAssignToCollabsService {
         },
       });
 
-      // ✅ Obtener datos del cliente y supervisor
+      // Obtener datos del cliente y supervisor
       const company =
         order.clientId &&
         (await this.prisma.clientCompany.findUnique({
@@ -156,7 +156,7 @@ export class OrdersAssignToCollabsService {
           ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
           : supervisor?.email ?? 'N/A';
 
-      // ✅ Enviar correo a colaboradores
+      // Enviar correo a colaboradores
       const emails = newAssignment.worksAssigned.map((w) => w.collaborator.email);
 
       await this.reportEmailService.sendAssignmentsToCollabs(
@@ -171,7 +171,7 @@ export class OrdersAssignToCollabsService {
         true,
       );
 
-      // ✅ Enviar correo al supervisor con detalle
+      // Enviar correo al supervisor con detalle
       const collaborators = newAssignment.worksAssigned.map((w) => ({
         name: w.collaborator.userDetail
           ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
@@ -250,7 +250,7 @@ export class OrdersAssignToCollabsService {
     });
 
     if (!getUser) {
-      throw new Error('User not found');
+      throw new BadRequestException('User not found');
     }
 
     // 👇 Si no vienen parámetros de paginación => no paginar
@@ -384,13 +384,56 @@ export class OrdersAssignToCollabsService {
   async update(id: number, updateOrdersAssignToCollabDto: UpdateOrdersAssignToCollabDto) {
     const { collaboratorIds, ...rest } = updateOrdersAssignToCollabDto;
 
+    if (collaboratorIds && collaboratorIds.length > 0) {
+      // Buscar si alguno de los colaboradores tiene órdenes activas o no cerradas
+      const collabsWithPendingOrders = await this.prisma.workersAssignToOrder.findMany({
+        where: {
+          collaboratorId: { in: collaboratorIds },
+          orderAssignToCollab: {
+            workOrder: {
+              workOrderStatus: {
+                notIn: ['CLOSED', 'CANCELED'], // ⚠️ Pendientes o en ejecución
+              },
+            },
+          },
+        },
+        select: {
+          collaborator: {
+            select: {
+              id: true,
+              email: true,
+              userDetail: {
+                select: {
+                  names: true,
+                  lastNames: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Si alguno tiene orden pendiente, lanzar excepción
+      if (collabsWithPendingOrders.length > 0) {
+        const collabNames = collabsWithPendingOrders.map((c) => {
+          const { names, lastNames } = c.collaborator.userDetail || {};
+          return `${names ?? ''} ${lastNames ?? ''}`.trim() || c.collaborator.email;
+        });
+
+        throw new BadRequestException(
+          `Los siguientes colaboradores tienen órdenes pendientes por cerrar: ${collabNames.join(', ')}`
+        );
+      }
+    }
+
+    // Si pasa la validación, proceder con la actualización
     return this.prisma.orderAssignToCollabs.update({
       where: { id },
       data: {
         ...rest,
         ...(collaboratorIds && {
           worksAssigned: {
-            deleteMany: {}, // elimina asignaciones anteriores
+            deleteMany: {}, // Elimina asignaciones anteriores
             create: collaboratorIds.map((collabId) => ({
               collaboratorId: collabId,
             })),
@@ -405,6 +448,12 @@ export class OrdersAssignToCollabsService {
                 id: true,
                 email: true,
                 roleId: true,
+                userDetail: {
+                  select: {
+                    names: true,
+                    lastNames: true,
+                  },
+                },
               },
             },
           },
