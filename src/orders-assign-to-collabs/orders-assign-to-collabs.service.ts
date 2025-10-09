@@ -26,25 +26,23 @@ export class OrdersAssignToCollabsService {
       collaboratorIds,
     } = createOrdersAssignToCollabDto;
 
-    // 🔹 Convertir fechas explícitamente a Date
     const startDate = new Date(orderWorkDateStart);
     const endDate = new Date(orderWorkDateEnd);
 
-    // Validar que la orden de trabajo exista
+    // ✅ Validar existencia de la orden
     const order = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
     });
-    if (!order) {
-      throw new BadRequestException('La orden de trabajo no existe');
-    }
+    if (!order) throw new BadRequestException('La orden de trabajo no existe');
 
-    // Validar que los colaboradores existan y tengan el rol correcto
+    // ✅ Validar colaboradores válidos
     const users = await this.prisma.user.findMany({
       where: {
         id: { in: collaboratorIds },
-        roleId: 5, // 👈 rol "colaborador"
+        roleId: 5,
         isVerified: true,
       },
+      include: { userDetail: true },
     });
 
     if (users.length !== collaboratorIds.length) {
@@ -53,73 +51,53 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    // Validar que los colaboradores no tengan asignaciones en el mismo rango de fecha/hora
-    const conflictingAssignments = await this.prisma.orderAssignToCollabs.findMany({
-      where: {
-        worksAssigned: {
-          some: {
-            collaboratorId: { in: collaboratorIds },
-          },
-        },
-        AND: [
-          {
-            orderWorkDateStart: { lte: endDate },
-            orderWorkDateEnd: { gte: startDate },
-          },
-        ],
-        ...(startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0]
-          ? { orderWorkHourStart: orderWorkHourStart }
-          : {}),
-      },
-      include: {
-        worksAssigned: true,
-      },
-    });
-
-    console.log('Asignaciones conflictivas encontradas:', conflictingAssignments);
-
-    // validar que los colaboradores no tengan ordenes por cerrar
-    const ordersToClose = await this.prisma.workersAssignToOrder.findMany({
+    // ✅ Verificar si los colaboradores tienen órdenes activas (no cerradas)
+    const activeAssignments = await this.prisma.workersAssignToOrder.findMany({
       where: {
         collaboratorId: { in: collaboratorIds },
         orderAssignToCollab: {
-          orderWorkDateStart: { lte: endDate },
-          orderWorkDateEnd: { gte: startDate },
-          ...(startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0]
-            ? { orderWorkHourStart: orderWorkHourStart }
-            : {}),
+          workOrder: {
+            workOrderStatus: {
+              notIn: ['CLOSED', 'CANCELED', 'INACTIVE'], // 👈 Solo órdenes aún abiertas
+            },
+          },
         },
-      },      
+      },
+      include: {
+        collaborator: {
+          include: { userDetail: true },
+        },
+        orderAssignToCollab: {
+          include: {
+            workOrder: {
+              select: {
+                id: true,
+                workOrderCodePo: true,
+                workOrderStatus: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    console.log('Órdenes por cerrar encontradas:', ordersToClose);
-
-    if (conflictingAssignments.length > 0) {
-      const conflictingCollaborators = conflictingAssignments.flatMap((assignment) =>
-        assignment.worksAssigned
-          .filter((work) => collaboratorIds.includes(work.collaboratorId))
-          .map((work) => work.collaboratorId),
-      );
-
-      console.log('Colaboradores con conflictos:', conflictingCollaborators);
-
-      const conflictingCollaboratorsDetails = await this.prisma.userDetail.findMany({
-        where: {
-          userId: { in: conflictingCollaborators },
-        },
+    if (activeAssignments.length > 0) {
+      const pendingList = activeAssignments.map((a) => {
+        const name = a.collaborator.userDetail
+          ? `${a.collaborator.userDetail.names} ${a.collaborator.userDetail.lastNames}`
+          : a.collaborator.email;
+        const code = a.orderAssignToCollab.workOrder.workOrderCodePo ?? `#${a.orderAssignToCollab.workOrder.id}`;
+        const status = a.orderAssignToCollab.workOrder.workOrderStatus;
+        return `${name} (Orden ${code}, Estado: ${status})`;
       });
 
-      const conflictingCollaboratorsNames = conflictingCollaboratorsDetails
-        .map((detail) => `${detail.names} ${detail.lastNames}`)
-        .join(', ');
-
       throw new BadRequestException(
-        `Los colaboradores ${conflictingCollaboratorsNames} tienen una asignación en el mismo rango de fecha/hora ${startDate.toISOString().split('T')[0]} ${orderWorkHourStart} - ${endDate.toISOString().split('T')[0]}`,
+        `Los siguientes colaboradores tienen órdenes pendientes por cerrar: ${pendingList.join(', ')}`,
       );
     }
 
+    // ✅ Crear asignación
     try {
-      // Crear la asignación de la orden con los colaboradores
       const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
           workOrderId,
@@ -129,9 +107,7 @@ export class OrdersAssignToCollabsService {
           orderLocationWork,
           orderObservations,
           worksAssigned: {
-            create: collaboratorIds.map((collabId) => ({
-              collaboratorId: collabId,
-            })),
+            create: collaboratorIds.map((id) => ({ collaboratorId: id })),
           },
         },
         include: {
@@ -148,12 +124,7 @@ export class OrdersAssignToCollabsService {
                       lastNames: true,
                       userCostPerAssignment: {
                         include: {
-                          assignment: {
-                            select: {
-                              id: true,
-                              title: true,
-                            },
-                          },
+                          assignment: { select: { id: true, title: true } },
                         },
                       },
                     },
@@ -165,32 +136,29 @@ export class OrdersAssignToCollabsService {
         },
       });
 
-      // Extraemos los correos de los colaboradores
-      const emails = newAssignment.worksAssigned.map((work) => work.collaborator.email);
-
-      // Obtener el companyName a partir de order.clientId (ya no usamos contratos)
-      let companyName = 'N/A';
-      if (order.clientId) {
-        const company = await this.prisma.clientCompany.findUnique({
+      // ✅ Obtener datos del cliente y supervisor
+      const company =
+        order.clientId &&
+        (await this.prisma.clientCompany.findUnique({
           where: { id: order.clientId },
-        });
-        companyName = company?.companyName ?? 'N/A';
-      }
+        }));
 
-      // Usar el workOrderCodePo de la orden si existe
+      const companyName = company?.companyName ?? 'N/A';
       const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-      // Extraemos el detalle del supervisor
       const supervisor = await this.prisma.user.findUnique({
         where: { id: order.supervisorUserId },
         include: { userDetail: true },
       });
 
-      // Preparar texto del supervisor (seguro manejar cuando no haya userDetail)
       const supervisorName =
-        supervisor?.userDetail ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}` : supervisor?.email ?? 'N/A';
+        supervisor?.userDetail
+          ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
+          : supervisor?.email ?? 'N/A';
 
-      // Enviar correo de reporte a los colaboradores
+      // ✅ Enviar correo a colaboradores
+      const emails = newAssignment.worksAssigned.map((w) => w.collaborator.email);
+
       await this.reportEmailService.sendAssignmentsToCollabs(
         emails,
         orderCodePo,
@@ -200,22 +168,20 @@ export class OrdersAssignToCollabsService {
         orderWorkHourStart,
         orderLocationWork,
         orderObservations,
-        true, // usar Zoho API
+        true,
       );
 
-      // Extraemos la lista de colaboradores con sus asignaciones (títulos)
-      const collaborators = newAssignment.worksAssigned.map((work) => ({
-        name:
-          work.collaborator.userDetail?.names
-            ? `${work.collaborator.userDetail.names} ${work.collaborator.userDetail.lastNames}`
-            : work.collaborator.email,
-        email: work.collaborator.email,
-        assignments: (work.collaborator.userDetail?.userCostPerAssignment || []).map(
+      // ✅ Enviar correo al supervisor con detalle
+      const collaborators = newAssignment.worksAssigned.map((w) => ({
+        name: w.collaborator.userDetail
+          ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
+          : w.collaborator.email,
+        email: w.collaborator.email,
+        assignments: (w.collaborator.userDetail?.userCostPerAssignment || []).map(
           (cost) => cost.assignment.title,
         ),
       }));
 
-      // Enviar correo al supervisor con la lista de colaboradores asignados
       if (supervisor?.email) {
         await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
           supervisor.email,
@@ -231,10 +197,10 @@ export class OrdersAssignToCollabsService {
 
       return newAssignment;
     } catch (error) {
-      // opcional: loguear error para debugging
       console.error('Error creando assignment to collabs:', error);
       throw new BadRequestException(
-        error.message || 'Error al crear la asignación del usuario a la orden de trabajo',
+        error.message ||
+        'Error al crear la asignación del usuario a la orden de trabajo',
       );
     }
   }
@@ -337,7 +303,7 @@ export class OrdersAssignToCollabsService {
                 companyName: true,
                 employerPhone: true,
                 clientAddress: true,
-                employerEmail: true,                
+                employerEmail: true,
               },
             },
             supervisorUser: {

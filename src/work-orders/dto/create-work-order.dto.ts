@@ -4,9 +4,12 @@ import { Type } from 'class-transformer';
 
 export enum WorkOrderStatus {
     PENDING = 'PENDING',
+    PARTIALLY_RUNNING = 'PARTIALLY_RUNNING',
     RUNNING = 'RUNNING',
+    PARTIALLY_CLOSED = 'PARTIALLY_CLOSED',
     CLOSED = 'CLOSED',
     CANCELED = 'CANCELED',
+    INACTIVE = 'INACTIVE',
 }
 
 class AssignmentQuantityDto {
