@@ -349,6 +349,84 @@ export class CheckInCheckOutService {
     return workOrder;
   }
 
+  async update(
+    id: number,
+    dto: {
+      checkType: CheckType; // 'IN' o 'OUT'
+      time?: string;
+      status?: string;
+      attachEvidenceOneUrl?: string;
+      attachEvidenceTwoUrl?: string;
+    },
+  ) {
+    const { checkType, time, status, attachEvidenceOneUrl, attachEvidenceTwoUrl } = dto;
+
+    if (!checkType) {
+      throw new BadRequestException('Debe especificar el tipo de registro: IN o OUT.');
+    }
+
+    if (checkType === CheckType.IN) {
+      const existingCheckIn = await this.prisma.checkIn.findUnique({
+        where: { id },
+      });
+
+      if (!existingCheckIn) {
+        throw new BadRequestException(`No se encontró un check-in con id ${id}.`);
+      }
+
+      const updatedCheckIn = await this.prisma.checkIn.update({
+        where: { id },
+        data: {
+          ...(time && { startTime: time }),
+          ...(status && { initialStatus: status }),
+          ...(attachEvidenceOneUrl && { attachEvidenceOneUrl }),
+          ...(attachEvidenceTwoUrl && { attachEvidenceTwoUrl }),
+        },
+        include: {
+          userCollab: { select: { id: true, email: true, userDetail: true } },
+          order: true,
+        },
+      });
+
+      return {
+        message: 'Check-in actualizado correctamente.',
+        updatedCheckIn,
+      };
+    }
+
+    if (checkType === CheckType.OUT) {
+      const existingCheckOut = await this.prisma.checkOut.findUnique({
+        where: { id },
+      });
+
+      if (!existingCheckOut) {
+        throw new BadRequestException(`No se encontró un check-out con id ${id}.`);
+      }
+
+      const updatedCheckOut = await this.prisma.checkOut.update({
+        where: { id },
+        data: {
+          ...(time && { finalTime: time }),
+          ...(status && { initialStatus: status }),
+          ...(attachEvidenceOneUrl && { attachEvidenceOneUrl }),
+          ...(attachEvidenceTwoUrl && { attachEvidenceTwoUrl }),
+        },
+        include: {
+          userCollab: { select: { id: true, email: true, userDetail: true } },
+          order: true,
+        },
+      });
+
+      return {
+        message: 'Check-out actualizado correctamente.',
+        updatedCheckOut,
+      };
+    }
+
+    throw new BadRequestException('Tipo de registro inválido. Use IN o OUT.');
+  }
+
+
   async remove(id: number) {
     await this.prisma.checkIn.deleteMany({ where: { id } });
     await this.prisma.checkOut.deleteMany({ where: { id } });
