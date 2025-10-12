@@ -29,44 +29,45 @@ export class OrdersAssignToCollabsService {
     const startDate = new Date(orderWorkDateStart);
     const endDate = new Date(orderWorkDateEnd);
 
-    // Validar existencia de la orden
+    // 1️⃣ Validar existencia de la orden
     const order = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
     });
     if (!order) throw new BadRequestException('La orden de trabajo no existe');
 
-    // Validar colaboradores válidos
+    // 2️⃣ Extraer IDs de los colaboradores
+    const collaboratorIdsList = collaboratorIds.map((c) => c.collaboratorId);
+
+    // 3️⃣ Validar que existan y tengan el rol correcto
     const users = await this.prisma.user.findMany({
       where: {
-        id: { in: collaboratorIds },
+        id: { in: collaboratorIdsList },
         roleId: 5,
         isVerified: true,
       },
       include: { userDetail: true },
     });
 
-    if (users.length !== collaboratorIds.length) {
+    if (users.length !== collaboratorIdsList.length) {
       throw new BadRequestException(
-        'Algunos collaboratorIds no existen o no tienen el rol de colaborador',
+        'Algunos colaboradores no existen o no tienen el rol correcto',
       );
     }
 
-    // Verificar si los colaboradores tienen órdenes activas (no cerradas)
+    // 4️⃣ Verificar órdenes activas
     const activeAssignments = await this.prisma.workersAssignToOrder.findMany({
       where: {
-        collaboratorId: { in: collaboratorIds },
+        collaboratorId: { in: collaboratorIdsList },
         orderAssignToCollab: {
           workOrder: {
             workOrderStatus: {
-              notIn: ['CLOSED', 'CANCELED', 'INACTIVE'], // 👈 Solo órdenes aún abiertas
+              notIn: ['CLOSED', 'CANCELED', 'INACTIVE'],
             },
           },
         },
       },
       include: {
-        collaborator: {
-          include: { userDetail: true },
-        },
+        collaborator: { include: { userDetail: true } },
         orderAssignToCollab: {
           include: {
             workOrder: {
@@ -86,17 +87,19 @@ export class OrdersAssignToCollabsService {
         const name = a.collaborator.userDetail
           ? `${a.collaborator.userDetail.names} ${a.collaborator.userDetail.lastNames}`
           : a.collaborator.email;
-        const code = a.orderAssignToCollab.workOrder.workOrderCodePo ?? `#${a.orderAssignToCollab.workOrder.id}`;
+        const code =
+          a.orderAssignToCollab.workOrder.workOrderCodePo ??
+          `#${a.orderAssignToCollab.workOrder.id}`;
         const status = a.orderAssignToCollab.workOrder.workOrderStatus;
         return `${name} (Orden ${code}, Estado: ${status})`;
       });
 
       throw new BadRequestException(
-        `Los siguientes colaboradores tienen órdenes pendientes por cerrar: ${pendingList.join(', ')}`,
+        `Los siguientes colaboradores tienen órdenes pendientes: ${pendingList.join(', ')}`,
       );
     }
 
-    // Crear asignación
+    // 5️⃣ Crear la asignación principal
     try {
       const newAssignment = await this.prisma.orderAssignToCollabs.create({
         data: {
@@ -107,7 +110,17 @@ export class OrdersAssignToCollabsService {
           orderLocationWork,
           orderObservations,
           worksAssigned: {
-            create: collaboratorIds.map((id) => ({ collaboratorId: id })),
+            create: collaboratorIds.flatMap((c) => {
+              if (!Array.isArray(c.assigmentsId) || c.assigmentsId.length === 0) {
+                console.warn(`⚠️ Colaborador ${c.collaboratorId} no tiene asignaciones válidas.`);
+                return [];
+              }
+
+              return c.assigmentsId.map((assignmentId) => ({
+                collaboratorId: c.collaboratorId,
+                assignmentId,
+              }));
+            }),
           },
         },
         include: {
@@ -117,7 +130,6 @@ export class OrdersAssignToCollabsService {
                 select: {
                   id: true,
                   email: true,
-                  roleId: true,
                   userDetail: {
                     select: {
                       names: true,
@@ -131,12 +143,15 @@ export class OrdersAssignToCollabsService {
                   },
                 },
               },
+              assignment: {
+                select: { id: true, title: true },
+              },
             },
           },
         },
       });
 
-      // Obtener datos del cliente y supervisor
+      // 6️⃣ Datos del cliente y supervisor
       const company =
         order.clientId &&
         (await this.prisma.clientCompany.findUnique({
@@ -156,31 +171,65 @@ export class OrdersAssignToCollabsService {
           ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
           : supervisor?.email ?? 'N/A';
 
-      // Enviar correo a colaboradores
-      const emails = newAssignment.worksAssigned.map((w) => w.collaborator.email);
+      // 7️⃣ Agrupar asignaciones por colaborador
+      type CollaboratorGroup = {
+        id: number;
+        email: string;
+        name: string;
+        assignments: { id: number; title: string }[];
+      };
 
-      await this.reportEmailService.sendAssignmentsToCollabs(
-        emails,
-        orderCodePo,
-        companyName,
-        supervisorName,
-        startDate.toISOString().split('T')[0],
-        orderWorkHourStart,
-        orderLocationWork,
-        orderObservations,
-        true,
+      const collaboratorsGrouped = Object.values(
+        newAssignment.worksAssigned.reduce((acc, w) => {
+          const collabId = w.collaborator.id;
+          if (!acc[collabId]) {
+            acc[collabId] = {
+              id: collabId,
+              email: w.collaborator.email,
+              name: w.collaborator.userDetail
+                ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
+                : w.collaborator.email,
+              assignments: [],
+            };
+          }
+
+          // Evita títulos duplicados
+          if (!acc[collabId].assignments.some(a => a.id === w.assignment.id)) {
+            acc[collabId].assignments.push({
+              id: w.assignment.id,
+              title: w.assignment.title,
+            });
+          }
+
+          return acc;
+        }, {} as Record<number, CollaboratorGroup>),
       );
 
-      // Enviar correo al supervisor con detalle
-      const collaborators = newAssignment.worksAssigned.map((w) => ({
-        name: w.collaborator.userDetail
-          ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
-          : w.collaborator.email,
-        email: w.collaborator.email,
-        assignments: (w.collaborator.userDetail?.userCostPerAssignment || []).map(
-          (cost) => cost.assignment.title,
-        ),
-      }));
+      // 8️⃣ Enviar correo a cada colaborador
+      for (const collab of Object.values(collaboratorsGrouped)) {
+        if (!collab.email) continue;
+        await this.reportEmailService.sendAssignmentsToCollabs(
+          [collab.email],
+          orderCodePo,
+          companyName,
+          supervisorName,
+          startDate.toISOString().split('T')[0],
+          orderWorkHourStart,
+          orderLocationWork,
+          orderObservations,
+          collab.assignments.map((a) => a.title),
+          true,
+        );
+      }
+
+      // 9️⃣ Enviar correo al supervisor
+      const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
+        (collab) => ({
+          name: collab.name,
+          email: collab.email,
+          assignments: collab.assignments.map((a) => a.title),
+        }),
+      );
 
       if (supervisor?.email) {
         await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
@@ -191,11 +240,21 @@ export class OrdersAssignToCollabsService {
           orderWorkHourStart,
           orderLocationWork,
           orderObservations,
-          collaborators,
+          collaboratorsForEmail,
         );
       }
 
-      return newAssignment;
+      // 🔁 10️⃣ Retornar respuesta agrupada (sin duplicados)
+      return {
+        id: newAssignment.id,
+        workOrderId: newAssignment.workOrderId,
+        orderWorkDateStart: newAssignment.orderWorkDateStart,
+        orderWorkDateEnd: newAssignment.orderWorkDateEnd,
+        orderWorkHourStart: newAssignment.orderWorkHourStart,
+        orderLocationWork: newAssignment.orderLocationWork,
+        orderObservations: newAssignment.orderObservations,
+        collaborators: collaboratorsGrouped, // ✅ Agrupado y limpio
+      };
     } catch (error) {
       console.error('Error creando assignment to collabs:', error);
       throw new BadRequestException(
@@ -207,88 +266,172 @@ export class OrdersAssignToCollabsService {
 
   // Listemos todos los usuarios no asignados a una orden
   async findAllUnassignedUsers(workOrderId: number) {
-
     // Validar que la orden de trabajo exista
     const order = await this.prisma.workOrder.findUnique({
       where: { id: Number(workOrderId) },
     });
+
     if (!order) {
       throw new BadRequestException('La orden de trabajo no existe');
     }
 
-    // Listar todos los usuarios de role 5 que no tienen asignaciones en la orden
-
-    const users = await this.prisma.user.findMany({
+    // Buscar los colaboradores (roleId = 5) que estén verificados
+    // y que NO estén asignados a esta orden
+    const unassignedUsers = await this.prisma.user.findMany({
       where: {
-        roleId: 5, // rol de "colaborador"
+        roleId: 5,
         isVerified: true,
-        NOT: {
-          workersAssignToOrder: {
-            some: {
-              orderAssignToCollabId: Number(workOrderId),
+        workersAssignToOrder: {
+          none: {
+            orderAssignToCollab: {
+              workOrderId: Number(workOrderId),
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        userDetail: {
+          select: {
+            names: true,
+            lastNames: true,
+            phone: true,
+            userCostPerAssignment: {
+              include: {
+                assignment: {
+                  select: { id: true, title: true },
+                },
+              },
             },
           },
         },
       },
     });
 
-    // traer el detalle de los colaboradores
-    const usersDetails = await this.prisma.userDetail.findMany({
-      where: {
-        userId: { in: users.map((user) => user.id) },
-      },
-    });
+    // Si no hay usuarios sin asignar
+    if (unassignedUsers.length === 0) {
+      throw new BadRequestException('No hay colaboradores disponibles para esta orden');
+    }
 
-    return usersDetails;
+    return unassignedUsers;
   }
 
   async findAll(params: PaginationDto, user) {
     const { page, limit } = params;
 
+    // Verificar usuario autenticado
     const getUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
+    if (!getUser) throw new BadRequestException('User not found');
 
-    if (!getUser) {
-      throw new BadRequestException('User not found');
-    }
-
-    // 👇 Si no vienen parámetros de paginación => no paginar
+    // Configuración de paginación
     const shouldPaginate = !!(page && limit);
-    const pageNumber = page ? Number(page) : 1;
-    const limitNumber = limit ? Number(limit) : 10;
+    const pageNumber = Number(page) || 1;
+    const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
 
-    // 👇 Condición base de búsqueda
+    // Filtro base
     let whereCondition: any = {};
-    console.log('Role ID del usuario autenticado:', getUser);
-    if (getUser.roleId === 5) {
-      // Si es colaborador (roleId = 5), filtrar por su email
 
+    if (getUser.roleId === 5) {
+      // Si es colaborador (roleId = 5), solo mostrar órdenes donde esté asignado
       whereCondition = {
         worksAssigned: {
           some: {
-            collaborator: {
-              email: getUser.email,
-            },
+            collaboratorId: getUser.id,
           },
         },
       };
     }
 
-    // 👇 Contar registros filtrados
+    // Contar registros
     const total = await this.prisma.orderAssignToCollabs.count({
       where: whereCondition,
     });
 
-    // 👇 Consultar datos con o sin paginación
+    // Consultar datos
     const data = await this.prisma.orderAssignToCollabs.findMany({
       where: whereCondition,
       skip: shouldPaginate ? skip : undefined,
       take: shouldPaginate ? limitNumber : undefined,
-      orderBy: {
-        createdAt: 'desc',
+      orderBy: { createdAt: 'desc' },
+      include: {
+        workOrder: {
+          include: {
+            ContractClient: {
+              include: { client: true },
+            },
+            clientCompany: {
+              select: {
+                id: true,
+                companyName: true,
+                employerPhone: true,
+                clientAddress: true,
+                employerEmail: true,
+              },
+            },
+            supervisorUser: {
+              select: {
+                id: true,
+                email: true,
+                userDetail: {
+                  select: { names: true, lastNames: true },
+                },
+              },
+            },
+          },
+        },
+        worksAssigned: {
+          include: {
+            collaborator: {
+              select: {
+                id: true,
+                email: true,
+                roleId: true,
+                userDetail: {
+                  select: {
+                    names: true,
+                    lastNames: true,
+                    userCostPerAssignment: {
+                      include: {
+                        assignment: {
+                          select: { title: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            assignment: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
       },
+    });
+
+    // Si no se requiere paginación
+    if (!shouldPaginate) return data;
+
+    // Si se requiere paginación
+    return {
+      data,
+      total,
+      page: pageNumber,
+      lastPage: Math.ceil(total / limitNumber),
+    };
+  }
+
+  /* eslint-disable prettier/prettier */
+  async findOne(id: number) {
+    const orderAssignment = await this.prisma.orderAssignToCollabs.findUnique({
+      where: { id },
       include: {
         workOrder: {
           include: {
@@ -334,9 +477,7 @@ export class OrdersAssignToCollabsService {
                     userCostPerAssignment: {
                       include: {
                         assignment: {
-                          select: {
-                            title: true,
-                          },
+                          select: { title: true },
                         },
                       },
                     },
@@ -344,101 +485,55 @@ export class OrdersAssignToCollabsService {
                 },
               },
             },
-          },
-        },
-      },
-    });
-
-    // 👇 Si no hay paginación, devolver solo data
-    if (!shouldPaginate) {
-      return data;
-    }
-
-    return {
-      data,
-      total,
-      page: pageNumber,
-      lastPage: Math.ceil(total / limitNumber),
-    };
-  }
-
-  async findOne(id: number) {
-    return this.prisma.orderAssignToCollabs.findUnique({
-      where: { id },
-      include: {
-        worksAssigned: {
-          include: {
-            collaborator: {
+            assignment: {
               select: {
                 id: true,
-                email: true,
-                roleId: true,
+                title: true,
               },
             },
           },
         },
       },
     });
+
+    if (!orderAssignment) {
+      throw new BadRequestException(`Order assignment with ID ${id} not found`);
+    }
+
+    return orderAssignment;
   }
 
   async update(id: number, updateOrdersAssignToCollabDto: UpdateOrdersAssignToCollabDto) {
     const { collaboratorIds, ...rest } = updateOrdersAssignToCollabDto;
+    const collaboratorsList = collaboratorIds ?? [];
 
-    if (collaboratorIds && collaboratorIds.length > 0) {
-      // Buscar si alguno de los colaboradores tiene órdenes activas o no cerradas
-      const collabsWithPendingOrders = await this.prisma.workersAssignToOrder.findMany({
-        where: {
-          collaboratorId: { in: collaboratorIds },
-          orderAssignToCollab: {
-            workOrder: {
-              workOrderStatus: {
-                notIn: ['CLOSED', 'CANCELED'], // ⚠️ Pendientes o en ejecución
-              },
-            },
-          },
-        },
-        select: {
-          collaborator: {
-            select: {
-              id: true,
-              email: true,
-              userDetail: {
-                select: {
-                  names: true,
-                  lastNames: true,
-                },
-              },
-            },
-          },
-        },
-      });
+    // 1️⃣ Buscar la orden existente
+    const existingAssignment = await this.prisma.orderAssignToCollabs.findUnique({
+      where: { id },
+    });
 
-      // Si alguno tiene orden pendiente, lanzar excepción
-      if (collabsWithPendingOrders.length > 0) {
-        const collabNames = collabsWithPendingOrders.map((c) => {
-          const { names, lastNames } = c.collaborator.userDetail || {};
-          return `${names ?? ''} ${lastNames ?? ''}`.trim() || c.collaborator.email;
-        });
-
-        throw new BadRequestException(
-          `Los siguientes colaboradores tienen órdenes pendientes por cerrar: ${collabNames.join(', ')}`
-        );
-      }
+    if (!existingAssignment) {
+      throw new BadRequestException('No se encontró la asignación especificada.');
     }
 
-    // Si pasa la validación, proceder con la actualización
-    return this.prisma.orderAssignToCollabs.update({
+    // 2️⃣ Eliminar todas las asignaciones actuales
+    await this.prisma.workersAssignToOrder.deleteMany({
+      where: { orderAssignToCollabId: id },
+    });
+
+    // 3️⃣ Actualizar la información general y crear nuevas asignaciones
+    const updatedAssignment = await this.prisma.orderAssignToCollabs.update({
       where: { id },
       data: {
         ...rest,
-        ...(collaboratorIds && {
-          worksAssigned: {
-            deleteMany: {}, // Elimina asignaciones anteriores
-            create: collaboratorIds.map((collabId) => ({
-              collaboratorId: collabId,
+        worksAssigned: {
+          create: collaboratorsList.flatMap((c) =>
+            (c.assigmentsId ?? []).map((assignmentId) => ({
+              collaboratorId: c.collaboratorId,
+              assignmentId,
             })),
-          },
-        }),
+          ),
+        },
       },
       include: {
         worksAssigned: {
@@ -447,7 +542,6 @@ export class OrdersAssignToCollabsService {
               select: {
                 id: true,
                 email: true,
-                roleId: true,
                 userDetail: {
                   select: {
                     names: true,
@@ -456,10 +550,64 @@ export class OrdersAssignToCollabsService {
                 },
               },
             },
+            assignment: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+        workOrder: {
+          select: {
+            id: true,
           },
         },
       },
     });
+
+    // 4️⃣ Agrupar asignaciones por colaborador
+    const collaboratorsGrouped = Object.values(
+      updatedAssignment.worksAssigned.reduce((acc: any, w: any) => {
+        const collabId = w.collaborator.id;
+
+        if (!acc[collabId]) {
+          acc[collabId] = {
+            id: collabId,
+            email: w.collaborator.email,
+            name: w.collaborator.userDetail
+              ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
+              : w.collaborator.email,
+            assignments: [],
+          };
+        }
+
+        acc[collabId].assignments.push({
+          id: w.assignment.id,
+          title: w.assignment.title,
+        });
+
+        return acc;
+      }, {}),
+    );
+
+    // 5️⃣ Retornar respuesta alineada con create
+    return {
+      id: updatedAssignment.id,
+      workOrderId: updatedAssignment.workOrder.id,
+      orderWorkDateStart:
+        typeof updatedAssignment.orderWorkDateStart === 'string'
+          ? updatedAssignment.orderWorkDateStart
+          : updatedAssignment.orderWorkDateStart?.toISOString(),
+      orderWorkDateEnd:
+        typeof updatedAssignment.orderWorkDateEnd === 'string'
+          ? updatedAssignment.orderWorkDateEnd
+          : updatedAssignment.orderWorkDateEnd?.toISOString(),
+      orderWorkHourStart: updatedAssignment.orderWorkHourStart,
+      orderLocationWork: updatedAssignment.orderLocationWork,
+      orderObservations: updatedAssignment.orderObservations,
+      collaborators: collaboratorsGrouped,
+    };
   }
 
   async remove(id: number) {

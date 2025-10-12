@@ -23,10 +23,22 @@ export class ReportOrderAssignToSupervisorMailerService {
   ) {
     const collaboratorsList = collaborators
       .map(
-        (c) =>
-          `<li>👤 <span class="highlight">${c.name}</span> (${c.email})</li>`,
+        (c) => `
+      <li style="margin-bottom: 10px;">
+        👤 <span class="highlight">${c.name}</span> (${c.email})
+        ${c.assignments?.length
+            ? `<ul style="margin-top: 6px; margin-left: 20px;">
+                ${c.assignments
+              .map((a) => `<li>🧩 ${a}</li>`)
+              .join('')}
+              </ul>`
+            : '<p style="margin-left: 20px;">Sin asignaciones</p>'
+          }
+      </li>
+    `,
       )
       .join('');
+
 
     const htmlTemplate = `
       <!DOCTYPE html>

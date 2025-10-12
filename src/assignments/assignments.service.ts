@@ -34,9 +34,6 @@ export class AssignmentsService {
         console.error(`Error creating assignment with title ${element.title}:`, error);
         return { message: 'Error creating assignment' };
       }
-
-
-
     }
   }
 

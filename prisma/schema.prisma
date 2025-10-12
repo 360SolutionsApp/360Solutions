@@ -29,26 +29,26 @@ model User {
 }
 
 model UserDetail {
-  id                  Int           @id @default(autoincrement())
-  userId              Int           @unique
+  id                  Int       @id @default(autoincrement())
+  userId              Int       @unique
   names               String?
   lastNames           String?
   phone               String?
   address             String?
   birthDate           DateTime?
   documentTypeId      Int?
-  documentNumber      String?       @unique
+  documentNumber      String?   @unique
   profilePictureUrl   String?
   attachedDocumentUrl String?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
   currentCityId       Int?
   applicationCvUrl    String?
   socialSecurityUrl   String?
 
-  documentType        DocumentType? @relation(fields: [documentTypeId], references: [id])
-  user                User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
-  
+  documentType DocumentType? @relation(fields: [documentTypeId], references: [id])
+  user         User          @relation("UserToUserDetail", fields: [userId], references: [id], onDelete: Cascade)
+
   userCostPerAssignment userCostPerAssignment[]
 }
 
@@ -94,17 +94,19 @@ model Role {
 }
 
 model Assignment {
-  id             Int          @id @default(autoincrement())
+  id             Int      @id @default(autoincrement())
   title          String
-  costPerHour    Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  costPerHour    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   assignmentType Int
 
   workOrder                      workOrder[]                      @relation("assigmentWorkOrder")
   assignmentQuantityForWorkOrder assignmentQuantityForWorkOrder[]
 
   userCostPerAssignment userCostPerAssignment[]
+
+  workersAssignToOrder workersAssignToOrder[]
 }
 
 model ClientCompany {
@@ -224,6 +226,9 @@ model workersAssignToOrder {
 
   collaboratorId Int
   collaborator   User @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  assignmentId Int?
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id])
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
