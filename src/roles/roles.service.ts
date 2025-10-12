@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Injectable } from '@nestjs/common';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -5,7 +6,7 @@ import { PrismaService } from 'src/prisma.service';
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createRoleDto: CreateRoleDto[]) {
     const existingRoles = await this.prisma.role.findMany({
