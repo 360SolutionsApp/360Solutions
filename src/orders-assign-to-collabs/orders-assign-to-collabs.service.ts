@@ -160,11 +160,11 @@ export class OrdersAssignToCollabsService {
       const companyName = company?.companyName ?? 'N/A';
       const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-      // Supervisor opcional
+      // 7️⃣ Supervisor opcional: solo si llega supervisorUserId y es distinto de 0
       let supervisorName = 'N/A';
       let supervisorEmail: string | null = null;
 
-      if (order.supervisorUserId) {
+      if (order.supervisorUserId && order.supervisorUserId !== 0) {
         const supervisor = await this.prisma.user.findUnique({
           where: { id: order.supervisorUserId },
           include: { userDetail: true },
@@ -177,7 +177,7 @@ export class OrdersAssignToCollabsService {
         supervisorEmail = supervisor?.email ?? null;
       }
 
-      // 7️⃣ Agrupar asignaciones por colaborador
+      // 8️⃣ Agrupar asignaciones por colaborador
       type CollaboratorGroup = {
         id: number;
         email: string;
@@ -210,14 +210,14 @@ export class OrdersAssignToCollabsService {
         }, {} as Record<number, CollaboratorGroup>),
       );
 
-      // 8️⃣ Enviar correo a cada colaborador
+      // 9️⃣ Enviar correo a cada colaborador
       for (const collab of Object.values(collaboratorsGrouped)) {
         if (!collab.email) continue;
         await this.reportEmailService.sendAssignmentsToCollabs(
           [collab.email],
           orderCodePo,
           companyName,
-          supervisorName,
+          supervisorName, // Si no hay supervisor, queda "N/A"
           startDate.toISOString().split('T')[0],
           orderWorkHourStart,
           orderLocationWork,
@@ -227,7 +227,7 @@ export class OrdersAssignToCollabsService {
         );
       }
 
-      // 9️⃣ Enviar correo al supervisor solo si tiene email
+      // 🔟 Enviar correo al supervisor solo si supervisorEmail existe
       if (supervisorEmail) {
         const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
           (collab) => ({
@@ -249,7 +249,7 @@ export class OrdersAssignToCollabsService {
         );
       }
 
-      // 🔁 10️⃣ Retornar respuesta agrupada
+      // 1️⃣1️⃣ Retornar respuesta agrupada
       return {
         id: newAssignment.id,
         workOrderId: newAssignment.workOrderId,
