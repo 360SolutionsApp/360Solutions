@@ -43,7 +43,6 @@ export class OrdersAssignToCollabsService {
       where: {
         id: { in: collaboratorIdsList },
         roleId: 5,
-        isVerified: true,
       },
       include: { userDetail: true },
     });
@@ -228,6 +227,8 @@ export class OrdersAssignToCollabsService {
           true,
         );
       }
+
+      console.log('correo a enviar supervisorEmail:', supervisorEmail);
 
       // 🔟 Enviar correo al supervisor solo si supervisorEmail existe
       if (supervisorEmail) {
