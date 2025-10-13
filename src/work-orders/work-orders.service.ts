@@ -15,47 +15,53 @@ export class WorkOrdersService {
 
   // Crear una nueva WorkOrder
   async create(dto: CreateWorkOrderDto, userEmail: string) {
+    // 1️⃣ Buscar usuario que crea la orden
     const existingUser = await this.prisma.user.findUnique({
       where: { email: userEmail },
       select: { id: true, email: true }, // 🔒 no trae password
     });
     if (!existingUser) throw new NotFoundException('El usuario no existe');
 
-    // Listar todos los usuarios de RH
+    // 2️⃣ Listar todos los usuarios de RH
     const rhUsers = await this.prisma.user.findMany({
       where: { roleId: 2 },
       select: { id: true, email: true, userDetail: true }, // 🔒 no trae password
     });
 
+    // 3️⃣ Preparar datos de creación, usando spread condicional para supervisor
+    const dataToCreate: any = {
+      clientId: dto.clientId ?? null,
+      userEmailRegistry: userEmail,
+      workOrderStatus: dto.workOrderStatus ?? WorkOrderStatus.PENDING,
+      workOrderStartDate: dto.workOrderStartDate ?? null,
+      workOrderEndDate: dto.workOrderEndDate ?? null,
+      orderWorkHourStart: dto.orderWorkHourStart ?? null,
+      workOrderCodePo: dto.workOrderCodePo ?? null,
+      assigmentsClientReq: dto.assignmentIds
+        ? { connect: dto.assignmentIds.map((id) => ({ id })) }
+        : undefined,
+      assignmentQuantities: dto.assignmentQuantities
+        ? {
+          create: dto.assignmentQuantities.map((q) => ({
+            assignmentId: q.assignmentId,
+            quantityWorkers: q.quantityWorkers,
+          })),
+        }
+        : undefined,
+    };
+
+    // Agregar supervisor solo si se pasó en dto
+    if (dto.supervisorUserId) {
+      dataToCreate.supervisorUserId = dto.supervisorUserId;
+    }
+
+    // 4️⃣ Crear orden de trabajo
     const workOrder = await this.prisma.workOrder.create({
-      data: {
-        clientId: dto.clientId,
-        userEmailRegistry: userEmail,
-        supervisorUserId: dto.supervisorUserId,
-        workOrderStatus: dto.workOrderStatus ?? WorkOrderStatus.PENDING,
-
-        workOrderStartDate: dto.workOrderStartDate ?? null,
-        workOrderEndDate: dto.workOrderEndDate ?? null,
-        orderWorkHourStart: dto.orderWorkHourStart ?? null,
-        workOrderCodePo: dto.workOrderCodePo ?? null,
-
-        assigmentsClientReq: dto.assignmentIds
-          ? { connect: dto.assignmentIds.map((id) => ({ id })) }
-          : undefined,
-
-        assignmentQuantities: dto.assignmentQuantities
-          ? {
-            create: dto.assignmentQuantities.map((q) => ({
-              assignmentId: q.assignmentId,
-              quantityWorkers: q.quantityWorkers,
-            })),
-          }
-          : undefined,
-      },
+      data: dataToCreate,
       include: {
         clientCompany: true,
         assigmentsClientReq: true,
-        supervisorUser: { select: { id: true, email: true, userDetail: true } }, //
+        supervisorUser: { select: { id: true, email: true, userDetail: true } },
         assignmentQuantities: {
           include: {
             assignment: { select: { id: true, title: true, costPerHour: true } },
@@ -64,11 +70,13 @@ export class WorkOrdersService {
       },
     });
 
-    // Enviar email a RH y al supervisor
+    // 5️⃣ Enviar correo a RH y supervisor si existe
     const emailsRH = rhUsers.map((u) => u.email);
-    emailsRH.push(workOrder.supervisorUser.email);
+    if (workOrder.supervisorUser?.email) {
+      emailsRH.push(workOrder.supervisorUser.email);
+    }
 
-    const assignaments = workOrder.assignmentQuantities.map((q) => ({
+    const assignments = workOrder.assignmentQuantities.map((q) => ({
       name: q.assignment.title,
       quantity: q.quantityWorkers,
     }));
@@ -79,7 +87,7 @@ export class WorkOrdersService {
       emailsRH,
       workOrder.workOrderCodePo ?? 'N/A',
       companyName,
-      assignaments,
+      assignments,
     );
 
     return workOrder;

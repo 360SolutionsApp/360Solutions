@@ -38,10 +38,8 @@ export class UsersService {
       const user = await this.prismaService.user.create({
         data: {
           email: createUserDto.email,
-          password: createUserDto.password, // si aplica
-          role: {
-            connect: { id: createUserDto.roleId },
-          },
+          password: createUserDto.password,
+          role: { connect: { id: createUserDto.roleId } },
           userDetail: {
             create: {
               names: createUserDto.names,
@@ -57,28 +55,37 @@ export class UsersService {
         },
         include: {
           role: true,
-          userDetail: {
-            include: {
-              documentType: true,
-              userCostPerAssignment: true, // 👈 ya no es assignments
-            },
-          },
+          userDetail: { include: { documentType: true, userCostPerAssignment: true } },
         },
       });
 
-      // ✅ 4. Insertar costos por asignación si vienen en el DTO
-      if (createUserDto.userCostPerAssignment?.length) {
-        await this.prismaService.$transaction(
-          createUserDto.userCostPerAssignment.map(({ assignmentId, costPerHour }) =>
-            this.prismaService.userCostPerAssignment.create({
-              data: {
-                userDetailId: user.userDetail.id,
-                assignmentId,
-                costPerHour: typeof costPerHour === 'string' ? parseInt(costPerHour, 10) : costPerHour,
-              },
-            })
-          )
-        );
+      // ✅ 4. Insertar costos por asignación SOLO si el usuario puede tenerlos
+      // Roles internos: 1,2,4,6 (Super admin, Talento humano, Contable, Supervisor)
+      const internalRoleIds = [1, 2, 4, 6];
+
+      if (
+        createUserDto.userCostPerAssignment?.length &&
+        !internalRoleIds.includes(createUserDto.roleId)
+      ) {
+        const validCosts = createUserDto.userCostPerAssignment
+          .filter(
+            ({ assignmentId, costPerHour }) =>
+              assignmentId != null && (costPerHour != null && Number(costPerHour) > 0)
+          );
+
+        if (validCosts.length > 0) {
+          await this.prismaService.$transaction(
+            validCosts.map(({ assignmentId, costPerHour }) =>
+              this.prismaService.userCostPerAssignment.create({
+                data: {
+                  userDetailId: user.userDetail.id,
+                  assignmentId,
+                  costPerHour: typeof costPerHour === 'string' ? parseInt(costPerHour, 10) : costPerHour,
+                },
+              })
+            )
+          );
+        }
       }
 
       // ✅ 5. Crear el código de verificación
@@ -90,6 +97,7 @@ export class UsersService {
       throw new InternalServerErrorException('No se pudo crear el usuario');
     }
   }
+
 
   async validatePassword(password: string) {
     const passwordLength = password.length;

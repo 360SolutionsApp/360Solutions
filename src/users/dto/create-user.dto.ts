@@ -17,7 +17,8 @@ export class AssignmentCostDto {
   assignmentId: number;
 
   @IsInt()
-  costPerHour: number;
+  @IsOptional()
+  costPerHour?: number;
 }
 
 export class CreateUserDto {
