@@ -151,25 +151,31 @@ export class OrdersAssignToCollabsService {
         },
       });
 
-      // 6️⃣ Datos del cliente y supervisor
+      // 6️⃣ Datos del cliente
       const company =
         order.clientId &&
         (await this.prisma.clientCompany.findUnique({
           where: { id: order.clientId },
         }));
-
       const companyName = company?.companyName ?? 'N/A';
       const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-      const supervisor = await this.prisma.user.findUnique({
-        where: { id: order.supervisorUserId },
-        include: { userDetail: true },
-      });
+      // Supervisor opcional
+      let supervisorName = 'N/A';
+      let supervisorEmail: string | null = null;
 
-      const supervisorName =
-        supervisor?.userDetail
+      if (order.supervisorUserId) {
+        const supervisor = await this.prisma.user.findUnique({
+          where: { id: order.supervisorUserId },
+          include: { userDetail: true },
+        });
+
+        supervisorName = supervisor?.userDetail
           ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
           : supervisor?.email ?? 'N/A';
+
+        supervisorEmail = supervisor?.email ?? null;
+      }
 
       // 7️⃣ Agrupar asignaciones por colaborador
       type CollaboratorGroup = {
@@ -193,7 +199,6 @@ export class OrdersAssignToCollabsService {
             };
           }
 
-          // Evita títulos duplicados
           if (!acc[collabId].assignments.some(a => a.id === w.assignment.id)) {
             acc[collabId].assignments.push({
               id: w.assignment.id,
@@ -222,18 +227,18 @@ export class OrdersAssignToCollabsService {
         );
       }
 
-      // 9️⃣ Enviar correo al supervisor
-      const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
-        (collab) => ({
-          name: collab.name,
-          email: collab.email,
-          assignments: collab.assignments.map((a) => a.title),
-        }),
-      );
+      // 9️⃣ Enviar correo al supervisor solo si tiene email
+      if (supervisorEmail) {
+        const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
+          (collab) => ({
+            name: collab.name,
+            email: collab.email,
+            assignments: collab.assignments.map((a) => a.title),
+          }),
+        );
 
-      if (supervisor?.email) {
         await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
-          supervisor.email,
+          supervisorEmail,
           orderCodePo,
           companyName,
           startDate.toISOString().split('T')[0],
@@ -244,7 +249,7 @@ export class OrdersAssignToCollabsService {
         );
       }
 
-      // 🔁 10️⃣ Retornar respuesta agrupada (sin duplicados)
+      // 🔁 10️⃣ Retornar respuesta agrupada
       return {
         id: newAssignment.id,
         workOrderId: newAssignment.workOrderId,
@@ -253,7 +258,7 @@ export class OrdersAssignToCollabsService {
         orderWorkHourStart: newAssignment.orderWorkHourStart,
         orderLocationWork: newAssignment.orderLocationWork,
         orderObservations: newAssignment.orderObservations,
-        collaborators: collaboratorsGrouped, // ✅ Agrupado y limpio
+        collaborators: collaboratorsGrouped,
       };
     } catch (error) {
       console.error('Error creando assignment to collabs:', error);
@@ -263,6 +268,7 @@ export class OrdersAssignToCollabsService {
       );
     }
   }
+
 
   // Listemos todos los usuarios no asignados a una orden
   async findAllUnassignedUsers(workOrderId: number) {
