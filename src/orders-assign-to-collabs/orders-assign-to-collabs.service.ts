@@ -160,7 +160,7 @@ export class OrdersAssignToCollabsService {
       const companyName = company?.companyName ?? 'N/A';
       const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-      // 7️⃣ Supervisor opcional: solo si llega supervisorUserId y es distinto de 0
+      // 7️⃣ Supervisor opcional: solo si llega supervisorUserId y tiene email válido
       let supervisorName = 'N/A';
       let supervisorEmail: string | null = null;
 
@@ -174,7 +174,9 @@ export class OrdersAssignToCollabsService {
           ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
           : supervisor?.email ?? 'N/A';
 
-        supervisorEmail = supervisor?.email ?? null;
+        if (supervisor?.email && supervisor.email.trim() !== '') {
+          supervisorEmail = supervisor.email;
+        }
       }
 
       // 8️⃣ Agrupar asignaciones por colaborador
@@ -217,7 +219,7 @@ export class OrdersAssignToCollabsService {
           [collab.email],
           orderCodePo,
           companyName,
-          supervisorName, // Si no hay supervisor, queda "N/A"
+          supervisorName,
           startDate.toISOString().split('T')[0],
           orderWorkHourStart,
           orderLocationWork,
@@ -268,7 +270,6 @@ export class OrdersAssignToCollabsService {
       );
     }
   }
-
 
   // Listemos todos los usuarios no asignados a una orden
   async findAllUnassignedUsers(workOrderId: number) {
