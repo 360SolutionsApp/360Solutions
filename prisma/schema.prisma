@@ -167,8 +167,8 @@ model workOrder {
   orderWorkHourStart String?
   workOrderCodePo    String?
 
-  supervisorUserId Int
-  supervisorUser   User @relation(fields: [supervisorUserId], references: [id], onDelete: Restrict)
+  supervisorUserId Int?
+  supervisorUser   User? @relation(fields: [supervisorUserId], references: [id], onDelete: Restrict)
 
   workOrderStatus   WorkOrderStatus @default(PENDING)
   userEmailRegistry String

@@ -503,13 +503,19 @@ export class OrdersAssignToCollabsService {
     return orderAssignment;
   }
 
-  async update(id: number, updateOrdersAssignToCollabDto: UpdateOrdersAssignToCollabDto) {
+  async update(
+    id: number,
+    updateOrdersAssignToCollabDto: UpdateOrdersAssignToCollabDto,
+  ) {
     const { collaboratorIds, ...rest } = updateOrdersAssignToCollabDto;
     const collaboratorsList = collaboratorIds ?? [];
 
     // 1️⃣ Buscar la orden existente
     const existingAssignment = await this.prisma.orderAssignToCollabs.findUnique({
       where: { id },
+      include: {
+        workOrder: true,
+      },
     });
 
     if (!existingAssignment) {
@@ -521,7 +527,7 @@ export class OrdersAssignToCollabsService {
       where: { orderAssignToCollabId: id },
     });
 
-    // 3️⃣ Actualizar la información general y crear nuevas asignaciones
+    // 3️⃣ Actualizar información general y crear nuevas asignaciones
     const updatedAssignment = await this.prisma.orderAssignToCollabs.update({
       where: { id },
       data: {
@@ -561,16 +567,46 @@ export class OrdersAssignToCollabsService {
         workOrder: {
           select: {
             id: true,
+            workOrderCodePo: true,
+            clientId: true,
+            supervisorUserId: true,
           },
         },
       },
     });
 
-    // 4️⃣ Agrupar asignaciones por colaborador
-    const collaboratorsGrouped = Object.values(
-      updatedAssignment.worksAssigned.reduce((acc: any, w: any) => {
-        const collabId = w.collaborator.id;
+    // 4️⃣ Datos del cliente y supervisor
+    const order = updatedAssignment.workOrder;
+    const company =
+      order.clientId &&
+      (await this.prisma.clientCompany.findUnique({
+        where: { id: order.clientId },
+      }));
 
+    const companyName = company?.companyName ?? 'N/A';
+    const orderCodePo = order.workOrderCodePo ?? 'N/A';
+
+    const supervisor = await this.prisma.user.findUnique({
+      where: { id: order.supervisorUserId },
+      include: { userDetail: true },
+    });
+
+    const supervisorName =
+      supervisor?.userDetail
+        ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
+        : supervisor?.email ?? 'N/A';
+
+    // 5️⃣ Agrupar asignaciones por colaborador (sin duplicados)
+    type CollaboratorGroup = {
+      id: number;
+      email: string;
+      name: string;
+      assignments: { id: number; title: string }[];
+    };
+
+    const collaboratorsGrouped = Object.values(
+      updatedAssignment.worksAssigned.reduce((acc, w) => {
+        const collabId = w.collaborator.id;
         if (!acc[collabId]) {
           acc[collabId] = {
             id: collabId,
@@ -582,16 +618,62 @@ export class OrdersAssignToCollabsService {
           };
         }
 
-        acc[collabId].assignments.push({
-          id: w.assignment.id,
-          title: w.assignment.title,
-        });
+        // Evita títulos duplicados
+        if (!acc[collabId].assignments.some((a) => a.id === w.assignment.id)) {
+          acc[collabId].assignments.push({
+            id: w.assignment.id,
+            title: w.assignment.title,
+          });
+        }
 
         return acc;
-      }, {}),
+      }, {} as Record<number, CollaboratorGroup>),
     );
 
-    // 5️⃣ Retornar respuesta alineada con create
+    const startDate =
+      rest.orderWorkDateStart instanceof Date
+        ? rest.orderWorkDateStart
+        : new Date(rest.orderWorkDateStart);
+
+    // 6️⃣ Enviar correo a cada colaborador
+    for (const collab of collaboratorsGrouped) {
+      if (!collab.email) continue;
+
+      await this.reportEmailService.sendAssignmentsToCollabs(
+        [collab.email],
+        orderCodePo,
+        companyName,
+        supervisorName,
+        startDate.toISOString().split('T')[0],
+        rest.orderWorkHourStart ?? '',
+        rest.orderLocationWork ?? '',
+        rest.orderObservations ?? '',
+        collab.assignments.map((a) => a.title),
+        true,
+      );
+    }
+
+    // 7️⃣ Enviar correo al supervisor con todos los colaboradores
+    const collaboratorsForEmail = collaboratorsGrouped.map((collab) => ({
+      name: collab.name,
+      email: collab.email,
+      assignments: collab.assignments.map((a) => a.title),
+    }));
+
+    if (supervisor?.email) {
+      await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
+        supervisor.email,
+        orderCodePo,
+        companyName,
+        startDate.toISOString().split('T')[0],
+        rest.orderWorkHourStart ?? '',
+        rest.orderLocationWork ?? '',
+        rest.orderObservations ?? '',
+        collaboratorsForEmail,
+      );
+    }
+
+    // 8️⃣ Retornar respuesta alineada con create
     return {
       id: updatedAssignment.id,
       workOrderId: updatedAssignment.workOrder.id,

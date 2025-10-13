@@ -36,7 +36,7 @@ export class CreateWorkOrderDto {
     workOrderStatus?: WorkOrderStatus;
 
     @IsInt()
-    @IsNotEmpty()
+    @IsOptional()
     supervisorUserId: number;
 
     @IsOptional()
