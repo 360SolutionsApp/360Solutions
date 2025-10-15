@@ -203,7 +203,7 @@ export class UsersService {
     // 🔹 Definir condición de rol
     const whereCondition =
       roleId === 1 || roleId === 2
-        ? {} // Super Admin y Admin → ven todos
+        ? { roleId: 5 } // Super Admin y Admin → ven todos
         : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Calcular paginación
@@ -271,7 +271,7 @@ export class UsersService {
     // 🔹 Condición de rol
     const whereCondition =
       roleId === 1
-        ? { roleId: { notIn: [1, 3, 5] } } // Super Admin → ve todos excepto roles 1, 5 y 6
+        ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1, 5 y 6
         : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Verificar si hay parámetros de paginación válidos

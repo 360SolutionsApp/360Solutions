@@ -48,4 +48,10 @@ export class OrdersAssignToCollabsController {
   remove(@Param('id') id: string) {
     return this.ordersAssignToCollabsService.remove(+id);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('definitive/:id')
+  removeDefinitive(@Param('id') id: string) {
+    return this.ordersAssignToCollabsService.removeDefinitive(+id);
+  }
 }

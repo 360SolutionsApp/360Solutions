@@ -3,8 +3,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateCheckInCheckOutDto, CheckType } from './dto/create-check-in-check-out.dto';
 import { PrismaService } from 'src/prisma.service';
-import { WorkOrderStatus } from '@prisma/client';
-
+import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
 @Injectable()
 export class CheckInCheckOutService {
   constructor(private readonly prisma: PrismaService) { }
@@ -56,12 +55,12 @@ export class CheckInCheckOutService {
       console.log('colaboradores que ya han hecho check-in en esta orden.', checkInsCount, assignedCollabsOrder.length);
 
       // Actualizar estado de la orden
-      let newStatus: WorkOrderStatus;
+      let newStatus: workOrderStatus;
 
       if (checkInsCount === assignedCollabsOrder.length) {
-        newStatus = WorkOrderStatus.RUNNING; // Todos hicieron check-in
+        newStatus = workOrderStatus.RUNNING; // Todos hicieron check-in
       } else {
-        newStatus = WorkOrderStatus.PARTIALLY_RUNNING; // Al menos uno, pero no todos
+        newStatus = workOrderStatus.PARTIALLY_RUNNING; // Al menos uno, pero no todos
       }
 
       await this.prisma.workOrder.update({
@@ -103,12 +102,12 @@ export class CheckInCheckOutService {
       console.log('colaboradores que ya han hecho check-out en esta orden.', checkOutsCount, assignedCollabsOrder.length);
 
       // Actualizar estado de la orden
-      let newStatus: WorkOrderStatus;
+      let newStatus: workOrderStatus;
 
       if (checkOutsCount === assignedCollabsOrder.length) {
-        newStatus = WorkOrderStatus.CLOSED; // Todos hicieron check-out
+        newStatus = workOrderStatus.CLOSED; // Todos hicieron check-out
       } else {
-        newStatus = WorkOrderStatus.PARTIALLY_CLOSED; // Algunos han hecho check-out, pero no todos
+        newStatus = workOrderStatus.PARTIALLY_CLOSED; // Algunos han hecho check-out, pero no todos
       }
 
       await this.prisma.workOrder.update({

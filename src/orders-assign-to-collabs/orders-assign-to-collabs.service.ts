@@ -6,6 +6,7 @@ import { PrismaService } from 'src/prisma.service';
 import { PaginationDto } from 'src/helpers/pagination.dto';
 import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.service';
 import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
+import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
 
 @Injectable()
 export class OrdersAssignToCollabsService {
@@ -53,6 +54,7 @@ export class OrdersAssignToCollabsService {
       );
     }
 
+    /*
     // 4️⃣ Verificar órdenes activas
     const activeAssignments = await this.prisma.workersAssignToOrder.findMany({
       where: {
@@ -97,6 +99,7 @@ export class OrdersAssignToCollabsService {
         `Los siguientes colaboradores tienen órdenes pendientes: ${pendingList.join(', ')}`,
       );
     }
+      */
 
     // 5️⃣ Crear la asignación principal
     try {
@@ -293,6 +296,7 @@ export class OrdersAssignToCollabsService {
           none: {
             orderAssignToCollab: {
               workOrderId: Number(workOrderId),
+              workOrderStatus: { not: 'DELETE' },
             },
           },
         },
@@ -349,6 +353,8 @@ export class OrdersAssignToCollabsService {
         worksAssigned: {
           some: {
             collaboratorId: getUser.id,
+            // verofocar que no estén eliminados
+            workOrderStatus: { not: workOrderStatus.DELETE },
           },
         },
       };
@@ -439,7 +445,7 @@ export class OrdersAssignToCollabsService {
   /* eslint-disable prettier/prettier */
   async findOne(id: number) {
     const orderAssignment = await this.prisma.orderAssignToCollabs.findUnique({
-      where: { id },
+      where: { id, workOrderStatus: { not: 'DELETE' } },
       include: {
         workOrder: {
           include: {
@@ -594,17 +600,23 @@ export class OrdersAssignToCollabsService {
     const companyName = company?.companyName ?? 'N/A';
     const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-    const supervisor = await this.prisma.user.findUnique({
-      where: { id: order.supervisorUserId },
-      include: { userDetail: true },
-    });
+    // ✅ Supervisor opcional: solo se busca si existe supervisorUserId
+    let supervisor: any = null;
+    let supervisorName = 'N/A';
+    if (order.supervisorUserId) {
+      supervisor = await this.prisma.user.findUnique({
+        where: { id: order.supervisorUserId },
+        include: { userDetail: true },
+      });
 
-    const supervisorName =
-      supervisor?.userDetail
-        ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
-        : supervisor?.email ?? 'N/A';
+      if (supervisor) {
+        supervisorName = supervisor.userDetail
+          ? `${supervisor.userDetail.names} ${supervisor.userDetail.lastNames}`
+          : supervisor.email ?? 'N/A';
+      }
+    }
 
-    // 5️⃣ Agrupar asignaciones por colaborador (sin duplicados)
+    // 5️⃣ Agrupar asignaciones por colaborador
     type CollaboratorGroup = {
       id: number;
       email: string;
@@ -651,7 +663,7 @@ export class OrdersAssignToCollabsService {
         [collab.email],
         orderCodePo,
         companyName,
-        supervisorName,
+        supervisorName, // puede ser 'N/A'
         startDate.toISOString().split('T')[0],
         rest.orderWorkHourStart ?? '',
         rest.orderLocationWork ?? '',
@@ -661,14 +673,14 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    // 7️⃣ Enviar correo al supervisor con todos los colaboradores
-    const collaboratorsForEmail = collaboratorsGrouped.map((collab) => ({
-      name: collab.name,
-      email: collab.email,
-      assignments: collab.assignments.map((a) => a.title),
-    }));
-
+    // 7️⃣ Enviar correo al supervisor (solo si existe)
     if (supervisor?.email) {
+      const collaboratorsForEmail = collaboratorsGrouped.map((collab) => ({
+        name: collab.name,
+        email: collab.email,
+        assignments: collab.assignments.map((a) => a.title),
+      }));
+
       await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
         supervisor.email,
         orderCodePo,
@@ -681,7 +693,7 @@ export class OrdersAssignToCollabsService {
       );
     }
 
-    // 8️⃣ Retornar respuesta alineada con create
+    // 8️⃣ Retornar respuesta
     return {
       id: updatedAssignment.id,
       workOrderId: updatedAssignment.workOrder.id,
@@ -701,6 +713,33 @@ export class OrdersAssignToCollabsService {
   }
 
   async remove(id: number) {
+
+    // Obtenemos el id del wordOrder para validar su status
+    const workOrderId = await this.prisma.orderAssignToCollabs.findUnique({
+      where: { id },
+    })
+
+    console.log('order to delete:', workOrderId);
+
+    const workOrder = await this.prisma.workOrder.findUnique({
+      where: { id: workOrderId.workOrderId },
+    });
+
+    console.log('workOrder:', workOrder);
+
+    // Si la workOrder está con status 'PENDING', borrar definitivamente el registro invoncando removeDefinitive
+    if (workOrder.workOrderStatus === 'PENDING') {
+      return this.removeDefinitive(id);
+    } else {
+      // Actualizamos el estado a 'DELETE' (sin eliminar el registro)
+      return this.prisma.orderAssignToCollabs.update({
+        where: { id },
+        data: { workOrderStatus: 'DELETE' },
+      });
+    }
+  }
+
+  async removeDefinitive(id: number) {
     return this.prisma.orderAssignToCollabs.delete({
       where: { id },
     });

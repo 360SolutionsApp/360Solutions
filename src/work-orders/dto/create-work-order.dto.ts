@@ -10,6 +10,7 @@ export enum WorkOrderStatus {
     CLOSED = 'CLOSED',
     CANCELED = 'CANCELED',
     INACTIVE = 'INACTIVE',
+    DELETE = 'DELETE',
 }
 
 class AssignmentQuantityDto {

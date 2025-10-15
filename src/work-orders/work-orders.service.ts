@@ -275,6 +275,20 @@ export class WorkOrdersService {
     }
   }
 
+  // Actualizar solo el estado de la WorkOrder a "DELETE"
+  async markAsDeleted(id: number, userEmail: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, email: true }, // 🔒
+    });
+    if (!existingUser) throw new NotFoundException('El usuario no existe');
+
+    return this.prisma.workOrder.update({
+      where: { id },
+      data: { workOrderStatus: 'DELETE' },
+    });
+  }
+
   // Eliminar WorkOrder
   async remove(id: number, userEmail: string) {
     const existingUser = await this.prisma.user.findUnique({

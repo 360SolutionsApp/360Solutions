@@ -154,6 +154,7 @@ enum WorkOrderStatus {
   CLOSED // 5
   CANCELED // 6
   INACTIVE // 7
+  DELETE // 8
 }
 
 model workOrder {
@@ -213,6 +214,8 @@ model orderAssignToCollabs {
   orderObservations  String
 
   worksAssigned workersAssignToOrder[]
+
+  workOrderStatus   WorkOrderStatus @default(PENDING)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
