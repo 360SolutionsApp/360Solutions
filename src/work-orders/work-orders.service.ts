@@ -15,20 +15,20 @@ export class WorkOrdersService {
 
   // Crear una nueva WorkOrder
   async create(dto: CreateWorkOrderDto, userEmail: string) {
-    // 1️⃣ Buscar usuario que crea la orden
+    // Buscar usuario que crea la orden
     const existingUser = await this.prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, email: true }, // 🔒 no trae password
+      select: { id: true, email: true },
     });
     if (!existingUser) throw new NotFoundException('El usuario no existe');
 
-    // 2️⃣ Listar todos los usuarios de RH
+    // Listar todos los usuarios de RH
     const rhUsers = await this.prisma.user.findMany({
       where: { roleId: 2 },
-      select: { id: true, email: true, userDetail: true }, // 🔒 no trae password
+      select: { id: true, email: true },
     });
 
-    // 3️⃣ Preparar datos de creación, usando spread condicional para supervisor
+    // Preparar datos de creación
     const dataToCreate: any = {
       clientId: dto.clientId ?? null,
       userEmailRegistry: userEmail,
@@ -55,7 +55,7 @@ export class WorkOrdersService {
       dataToCreate.supervisorUserId = dto.supervisorUserId;
     }
 
-    // 4️⃣ Crear orden de trabajo
+    // Crear orden de trabajo
     const workOrder = await this.prisma.workOrder.create({
       data: dataToCreate,
       include: {
@@ -70,25 +70,43 @@ export class WorkOrdersService {
       },
     });
 
-    // 5️⃣ Enviar correo a RH y supervisor si existe
-    const emailsRH = rhUsers.map((u) => u.email);
-    if (workOrder.supervisorUser?.email) {
-      emailsRH.push(workOrder.supervisorUser.email);
+    // 5️⃣ Preparar lista de correos
+    const emailsToNotify = new Set<string>();
+
+    // 📩 Siempre incluir el usuario que creó la orden
+    emailsToNotify.add(existingUser.email);
+
+    // 📩 Agregar RH solo si existen
+    if (rhUsers.length > 0) {
+      rhUsers.forEach((u) => emailsToNotify.add(u.email));
     }
 
+    // 📩 Agregar supervisor si existe
+    if (workOrder.supervisorUser?.email) {
+      emailsToNotify.add(workOrder.supervisorUser.email);
+    }
+
+    // 🧩 Preparar datos para el correo
     const assignments = workOrder.assignmentQuantities.map((q) => ({
       name: q.assignment.title,
       quantity: q.quantityWorkers,
     }));
 
     const companyName = workOrder.clientCompany?.companyName ?? 'N/A';
+    const workOrderCode = workOrder.workOrderCodePo ?? 'N/A';
 
-    await this.reportEmailService.sendWorkOrder(
-      emailsRH,
-      workOrder.workOrderCodePo ?? 'N/A',
-      companyName,
-      assignments,
-    );
+    // 🚀 Enviar correo de forma no bloqueante (try/catch interno)
+    const recipients = Array.from(emailsToNotify);
+
+    if (recipients.length > 0) {
+      this.reportEmailService
+        .sendWorkOrder(recipients, workOrderCode, companyName, assignments)
+        .catch((err) =>
+          console.error('⚠️ Error al enviar correo (no bloqueante):', err),
+        );
+    } else {
+      console.log('ℹ️ No hay destinatarios para enviar correo de WorkOrder.');
+    }
 
     return workOrder;
   }
@@ -280,38 +298,63 @@ export class WorkOrdersService {
 
   // Actualizar solo el estado de la WorkOrder a "DELETE"
   async remove(id: number, userEmail: string) {
+    // Validar usuario
     const existingUser = await this.prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, email: true }, // 🔒
+      select: { id: true, email: true },
     });
-    if (!existingUser) throw new NotFoundException('El usuario no existe');
-
-    // Traemos la orden para verificar su estado actual
-    const workOrder = await this.prisma.workOrder.findUnique({ where: { id } });
-
-    // Validamos el estado de la orden
-    if (workOrder?.workOrderStatus === 'PENDING') {
-      this.remove(id, userEmail);
-    } else {
-      return this.prisma.workOrder.update({
-        where: { id },
-        data: { workOrderStatus: 'DELETE' },
-      });
+    if (!existingUser) {
+      throw new NotFoundException('El usuario no existe');
     }
 
+    // Buscar la orden
+    const workOrder = await this.prisma.workOrder.findUnique({ where: { id } });
+    if (!workOrder) {
+      throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
+    }
+
+    // Si está pendiente → eliminar definitivamente
+    if (workOrder.workOrderStatus === 'PENDING') {
+      const deleted = await this.removeDefinitive(id, userEmail);
+      return {
+        message: `WorkOrder con ID ${id} eliminada definitivamente.`,
+        deletedOrder: deleted,
+      };
+    }
+
+    // Si no está pendiente → marcar como eliminada
+    const updated = await this.prisma.workOrder.update({
+      where: { id },
+      data: { workOrderStatus: 'DELETE' },
+    });
+
+    return {
+      message: `WorkOrder con ID ${id} marcada como eliminada.`,
+      updatedOrder: updated,
+    };
   }
 
-  // Eliminar WorkOrder
+  // Eliminar definitivamente una WorkOrder
   async removeDefinitive(id: number, userEmail: string) {
+    // Validar usuario
     const existingUser = await this.prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, email: true }, // 🔒
+      select: { id: true, email: true },
     });
-    if (!existingUser) throw new NotFoundException('El usuario no existe');
+    if (!existingUser) {
+      throw new NotFoundException('El usuario no existe');
+    }
 
+    // Verificar que la orden exista
     const existing = await this.prisma.workOrder.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
+    if (!existing) {
+      throw new NotFoundException(`WorkOrder con ID ${id} no encontrada`);
+    }
 
-    return this.prisma.workOrder.delete({ where: { id } });
+    // Eliminar definitivamente y retornar la orden eliminada
+    const deletedOrder = await this.prisma.workOrder.delete({ where: { id } });
+
+    return deletedOrder;
   }
+
 }
