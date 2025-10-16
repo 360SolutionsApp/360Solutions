@@ -114,7 +114,10 @@ export class WorkOrdersService {
         orderAssignToCollab: {
           some: { worksAssigned: { some: { collaboratorId: userId } } },
         },
+        workOrderStatus: { not: 'DELETE' },
       };
+    } else {
+      whereCondition = { workOrderStatus: { not: 'DELETE' } };
     }
 
     const commonInclude = {
