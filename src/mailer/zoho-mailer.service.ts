@@ -93,17 +93,19 @@ export class ZohoMailService {
 
       return response.data;
     } catch (error) {
-      // Si el token expiró, refrescar y reintentar
-      if (error.response?.data?.data?.moreInfo === 'INVALID_OAUTHTOKEN') {
-        console.log('🔄 Token expirado, refrescando...');
+      const zohoError = error.response?.data;
+
+      // Manejar token inválido o expirado correctamente
+      if (
+        zohoError?.data?.[0]?.errorCode === 'INVALID_OAUTHTOKEN' ||
+        zohoError?.status?.code === 401
+      ) {
+        console.log('🔄 Token expirado o inválido, refrescando...');
         await this.refreshAccessToken();
         return this.sendMail({ to, subject, html });
       }
 
-      console.error(
-        '❌ Error al enviar correo:',
-        error.response?.data || error.message,
-      );
+      console.error('❌ Error al enviar correo:', zohoError || error.message);
       throw new HttpException(
         'No se pudo enviar el correo',
         HttpStatus.INTERNAL_SERVER_ERROR,
