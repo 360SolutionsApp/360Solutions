@@ -12,29 +12,28 @@ export class UsersCodeVerifyService {
   ) { }
 
   async createCode(userId: number) {
-
-    // Obtener email del usuario
+    // 1️⃣ Obtener email del usuario
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
-    // Genera un código OTP (One-Time Password) de 6 dígitos.
-    // Asegura que el número esté en el rango de 100000 a 999999.
+    if (!user) {
+      throw new BadRequestException('Usuario no encontrado.');
+    }
+
+    // 2️⃣ Generar códigos y fechas
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Establece la fecha de expiración del código.
-    // El código expirará 10 minutos después de su creación.
-    const verificationCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
-
-    // Generar un token único usando la versión 4 de UUID.
+    const verificationCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
     const tokenToResetPassword = uuidv4();
+    const tokenToResetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
-    // Establecer la fecha y hora de expiración para el token.
-    // En este caso, el token expirará en 1 hora (60 minutos * 60 segundos * 1000 milisegundos).
-    const tokenToResetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000);
-
-    // Guarda en la tabla 'UserVerification' usando Prisma.
     try {
+      // 3️⃣ Eliminar cualquier registro previo del mismo usuario
+      await this.prisma.userVerification.deleteMany({
+        where: { userId },
+      });
+
+      // 4️⃣ Crear un nuevo registro limpio
       const result = await this.prisma.userVerification.create({
         data: {
           userId,
@@ -49,22 +48,25 @@ export class UsersCodeVerifyService {
         throw new BadRequestException('No se pudieron guardar los códigos de verificación.');
       }
 
-      const timeExpiration = Math.floor((verificationCodeExpiry.getTime() - Date.now()) / 60000); // tiempo de expiración en minutos
+      // 5️⃣ Calcular tiempo de expiración y enviar correo
+      const timeExpiration = Math.floor(
+        (verificationCodeExpiry.getTime() - Date.now()) / 60000,
+      );
 
-      console.log('Tiempo de expiración en minutos:', timeExpiration);
-
-      // Envía el correo electrónico con el código de verificación.
       await this.codeVerifyMailerService.sendVerificationCode(
         user.email,
         verificationCode,
         tokenToResetPassword,
-        timeExpiration
+        timeExpiration,
       );
 
+      // 6️⃣ Devolver respuesta al frontend
       return {
         verificationCode,
         tokenToResetPassword,
+        expiresInMinutes: timeExpiration,
       };
+
     } catch (error) {
       console.error('Error al guardar los códigos de verificación:', error);
       throw new BadRequestException('No se pudieron generar los códigos de verificación.');

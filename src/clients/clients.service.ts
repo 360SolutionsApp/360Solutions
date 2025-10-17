@@ -179,12 +179,45 @@ export class ClientsService {
       throw new BadRequestException('User not found');
     }
 
+    // Validamos que el correo que viene en updateClientDto sea diferente al que viene en la base de datos.
+    const clientEmail = await this.prisma.clientCompany.findUnique({
+      where: { id },
+    });
+
+    console.log('clientEmail:', clientEmail);
+
+    const emailExists = await this.prisma.user.findFirst({
+      where: { email: updateClientDto.employerEmail },
+    });
+
+    console.log('emailExists:', emailExists);
+
+    if (clientEmail.employerEmail !== updateClientDto.employerEmail) {
+      // Verificamos que el email que viene en updateClientDto no exista en la base de datos.
+      if (emailExists && emailExists.id !== id) {
+        throw new BadRequestException('Email already exists');
+      }
+    }
+
     const dataSelf = {
       ...updateClientDto,
       IdUserRegistering: user.id,
     };
 
     try {
+
+      console.log('dataSelf:', dataSelf);
+
+      // Actualizamos el correo en la tabla user
+      const updatedUser = await this.prisma.user.update({
+        where: { email: clientEmail.employerEmail },
+        data: { email: updateClientDto.employerEmail },
+      });
+
+      if (!updatedUser) {
+        throw new BadRequestException('User not found');
+      }
+
       return await this.prisma.clientCompany.update({
         where: { id },
         data: dataSelf,

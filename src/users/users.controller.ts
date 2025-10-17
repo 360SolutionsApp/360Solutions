@@ -78,6 +78,15 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch('update-user-status/:email')
+  updateUserStatus(
+    @Param('email') email: string,
+    @Body('isActive') isActive: boolean,
+  ) {
+    return this.usersService.updateUserStatus(email, isActive);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch(':email')
   update(@Param('email') email: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(email, updateUserDto);

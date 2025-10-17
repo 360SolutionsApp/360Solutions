@@ -429,6 +429,15 @@ export class UsersService {
     return updatedUser;
   }
 
+  async updateUserStatus(email: string, isActive: boolean) {
+    const user = await this.prismaService.user.findUnique({ where: { email } });
+    if (!user) throw new NotFoundException('Usuario no encontrado.');
+
+    return await this.prismaService.user.update({
+      where: { id: user.id },
+      data: { isActive },
+    });
+  }
 
   async remove(id: number) {
     const user = await this.prismaService.user.findUnique({
