@@ -332,40 +332,38 @@ export class OrdersAssignToCollabsService {
   async findAll(params: PaginationDto, user) {
     const { page, limit } = params;
 
-    // Verificar usuario autenticado
+    // ✅ Verificar usuario autenticado
     const getUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
     if (!getUser) throw new BadRequestException('User not found');
 
-    // Configuración de paginación
+    // ✅ Configuración de paginación
     const shouldPaginate = !!(page && limit);
     const pageNumber = Number(page) || 1;
     const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
 
-    // Filtro base
+    // ✅ Filtro base
     let whereCondition: any = {};
-
     if (getUser.roleId === 5) {
-      // Si es colaborador (roleId = 5), solo mostrar órdenes donde esté asignado
+      // Si es colaborador (roleId = 5)
       whereCondition = {
         worksAssigned: {
           some: {
             collaboratorId: getUser.id,
-            // verofocar que no estén eliminados
             workOrderStatus: { not: workOrderStatus.DELETE },
           },
         },
       };
     }
 
-    // Contar registros
+    // ✅ Total
     const total = await this.prisma.orderAssignToCollabs.count({
       where: whereCondition,
     });
 
-    // Consultar datos
+    // ✅ Consulta principal
     const data = await this.prisma.orderAssignToCollabs.findMany({
       where: whereCondition,
       skip: shouldPaginate ? skip : undefined,
@@ -374,9 +372,7 @@ export class OrdersAssignToCollabsService {
       include: {
         workOrder: {
           include: {
-            ContractClient: {
-              include: { client: true },
-            },
+            ContractClient: { include: { client: true } },
             clientCompany: {
               select: {
                 id: true,
@@ -390,9 +386,7 @@ export class OrdersAssignToCollabsService {
               select: {
                 id: true,
                 email: true,
-                userDetail: {
-                  select: { names: true, lastNames: true },
-                },
+                userDetail: { select: { names: true, lastNames: true } },
               },
             },
           },
@@ -410,32 +404,48 @@ export class OrdersAssignToCollabsService {
                     lastNames: true,
                     userCostPerAssignment: {
                       include: {
-                        assignment: {
-                          select: { title: true },
-                        },
+                        assignment: { select: { title: true } },
                       },
                     },
                   },
                 },
               },
             },
-            assignment: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            assignment: { select: { id: true, title: true } },
           },
         },
       },
     });
 
-    // Si no se requiere paginación
-    if (!shouldPaginate) return data;
+    // ✅ Agrupar colaboradores duplicados
+    const groupedData = data.map(order => {
+      const collaboratorMap = new Map();
 
-    // Si se requiere paginación
+      order.worksAssigned.forEach(work => {
+        const collabId = work.collaborator.id;
+
+        if (!collaboratorMap.has(collabId)) {
+          collaboratorMap.set(collabId, {
+            collaborator: work.collaborator,
+            assignments: [],
+          });
+        }
+
+        // Añadimos la asignación al colaborador existente
+        collaboratorMap.get(collabId).assignments.push(work.assignment);
+      });
+
+      return {
+        ...order,
+        worksAssigned: Array.from(collaboratorMap.values()), // agrupados
+      };
+    });
+
+    // ✅ Retornar paginado o completo
+    if (!shouldPaginate) return groupedData;
+
     return {
-      data,
+      data: groupedData,
       total,
       page: pageNumber,
       lastPage: Math.ceil(total / limitNumber),
