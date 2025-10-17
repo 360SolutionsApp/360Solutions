@@ -20,7 +20,7 @@ export class ClientsService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new BadRequestException('User not found');
     }
 
     // Preguntamos si el employerIdentificationNumber del cliente ya existe
@@ -29,7 +29,7 @@ export class ClientsService {
     });
 
     if (existingClientCompany) {
-      throw new Error('Client with this employerIdentificationNumber already exists');
+      throw new BadRequestException('Client with this employerIdentificationNumber already exists');
     }
 
     // Preguntamos si el email del cliente ya existe
@@ -91,7 +91,7 @@ export class ClientsService {
       return { client, userClient };
     } catch (error) {
       console.error('Error creating client and user:', error);
-      throw new Error(error.message || 'Error creating client and user');
+      throw new BadRequestException(error.message || 'Error creating client and user');
     }
   }
 
@@ -101,7 +101,7 @@ export class ClientsService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new BadRequestException('User not found');
     }
 
     try {
@@ -111,7 +111,7 @@ export class ClientsService {
       );
     } catch (error) {
       console.error('Error uploading file:', error);
-      throw new Error(error.message || 'Error uploading file');
+      throw new BadRequestException(error.message || 'Error uploading file');
     }
   }*/
 
@@ -161,12 +161,12 @@ export class ClientsService {
       });
 
       if (!client) {
-        throw new Error('Client not found');
+        throw new BadRequestException('Client not found');
       }
       return client;
     } catch (error) {
       console.error('Error finding client:', error);
-      throw new Error(error.message || 'Error finding client');
+      throw new BadRequestException(error.message || 'Error finding client');
     }
   }
 
@@ -176,7 +176,7 @@ export class ClientsService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new BadRequestException('User not found');
     }
 
     const dataSelf = {
@@ -191,7 +191,7 @@ export class ClientsService {
       });
     } catch (error) {
       console.error('Error updating client:', error);
-      throw new Error(error.message || 'Error updating client');
+      throw new BadRequestException(error.message || 'Error updating client');
     }
   }
 
@@ -201,19 +201,41 @@ export class ClientsService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new BadRequestException('User not found');
+    }
+
+    // validamos que el cliente no tenga ordenes asignadas
+    const orders = await this.prisma.workOrder.findMany({
+      where: { clientId: id },
+    });
+
+    if (orders.length > 0) {
+      throw new BadRequestException('Cliente tiene ordenes asignadas');
     }
 
     try {
       // Eliminar contrato PDF del bucket
       //await this.clientCompanyAttachmentService.deleteContract(id);
 
+      // obtenemos el id del usuario asignado al cliente
+      const userClientEmail = await this.prisma.clientCompany.findUnique({
+        where: { id },
+      });
+
+      const userId = await this.prisma.user.findUnique({
+        where: { email: userClientEmail.employerEmail },
+      });
+      // Eliminamos el usuario asignado al cliente
+      await this.prisma.user.delete({
+        where: { id: userId.id },
+      });
+
       return await this.prisma.clientCompany.delete({
         where: { id },
       });
     } catch (error) {
       console.error('Error deleting client attachments:', error);
-      throw new Error(error.message || 'Error deleting client attachments');
+      throw new BadRequestException(error.message || 'Error deleting client attachments');
     }
   }
 }
