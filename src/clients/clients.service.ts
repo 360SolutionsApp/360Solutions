@@ -267,6 +267,7 @@ export class ClientsService {
       const userId = await this.prisma.user.findUnique({
         where: { email: userClientEmail.employerEmail },
       });
+      
       // Eliminamos el usuario asignado al cliente
       await this.prisma.user.delete({
         where: { id: userId.id },

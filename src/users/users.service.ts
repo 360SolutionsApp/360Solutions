@@ -389,10 +389,47 @@ export class UsersService {
     };
   }
 
+  // Actualizar todos los datos de un usuario (names, lastnames, phone, etc...) y su rol
+  async updateUserAndRole(email: string, updateRoleDto: UpdateUserDto) {
+    const user = await this.prismaService.user.findUnique({
+      where: { email: email },
+    });
+
+    if (!user) throw new NotFoundException('Usuario no encontrado.');
+
+    const id = user.id;
+
+    // Solo actualizar campos como: names, lastNames, phone, etc...
+    await this.prismaService.userDetail.update({
+      where: { userId: id },
+      data: {
+        names: updateRoleDto.names,
+        lastNames: updateRoleDto.lastNames,
+        phone: updateRoleDto.phone,
+        currentCityId: updateRoleDto.currentCityId,
+        address: updateRoleDto.address,
+        documentTypeId: updateRoleDto.documentTypeId,
+        documentNumber: updateRoleDto.documentNumber,
+        birthDate: updateRoleDto.birthDate,
+      },
+    });
+
+    // Actualizar el rol y el email
+    return this.prismaService.user.update({
+      where: { id },
+      data: {
+        email: updateRoleDto.email,
+        roleId: updateRoleDto.roleId,
+      },
+    });
+  }
+ 
 
   async update(email: string, updateUserDto: UpdateUserDto) {
     const user = await this.prismaService.user.findUnique({ where: { email } });
     if (!user) throw new NotFoundException('Usuario no encontrado.');
+
+    console.log('usuario encontrado', user)
 
     const updatedUser = await this.prismaService.userDetail.update({
       where: { userId: user.id },
@@ -402,10 +439,13 @@ export class UsersService {
         phone: updateUserDto.phone,
         currentCityId: updateUserDto.currentCityId,
         address: updateUserDto.address,
+        documentTypeId: updateUserDto.documentTypeId,
         documentNumber: updateUserDto.documentNumber,
         birthDate: updateUserDto.birthDate,
       },
     });
+
+    console.log('updatedUser:', updatedUser);
 
     // Reemplazar las asignaciones con costo
     if (updateUserDto.userCostPerAssignment && updateUserDto.userCostPerAssignment.length > 0) {

@@ -88,6 +88,12 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch('user-internal/:email')
+  updateUserInternal(@Param('email') email: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.updateUserAndRole(email, updateUserDto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch(':email')
   update(@Param('email') email: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(email, updateUserDto);
