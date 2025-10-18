@@ -29,7 +29,7 @@ export class ClientsService {
     });
 
     if (existingClientCompany) {
-      throw new BadRequestException('Client with this employerIdentificationNumber already exists');
+      throw new BadRequestException('Ya existe un cliente con este número de identificación');
     }
 
     // Preguntamos si el email del cliente ya existe
@@ -50,8 +50,17 @@ export class ClientsService {
 
     if (existingUser) {
       throw new BadRequestException(
-        `Error al crear el cliente con email: ${createClientDto.employerEmail} ya existe`,
+        `Error al crear el usuario con email: ${createClientDto.employerEmail} ya existe`,
       );
+    }
+
+    // Preguntamos si el documentNumber del cliente ya existe
+    const existingClientCompanyDocumentNumber = await this.prisma.userDetail.findFirst({
+      where: { documentNumber: createClientDto.employerIdentificationNumber },
+    });
+
+    if (existingClientCompanyDocumentNumber) {
+      throw new BadRequestException('Ya existe un usuario con este número de identificación');
     }
 
     // Datos del cliente (forzamos el usuario registrador)

@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { UsersAttachmentService } from './users-attachment.service';
 import {
   Controller,
