@@ -419,7 +419,7 @@ export class UsersService {
       where: { id },
       data: {
         email: updateRoleDto.email,
-        roleId: updateRoleDto.roleId,
+        roleId: updateRoleDto.userCostPerAssignment[0].assignmentId,
       },
     });
   }
