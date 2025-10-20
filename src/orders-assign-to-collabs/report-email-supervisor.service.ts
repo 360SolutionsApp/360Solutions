@@ -2,6 +2,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { ZohoMailService } from 'src/mailer/zoho-mailer.service';
+import { formatToTextDate } from 'src/helpers/formatDate';
 
 @Injectable()
 export class ReportOrderAssignToSupervisorMailerService {
@@ -69,7 +70,7 @@ export class ReportOrderAssignToSupervisorMailerService {
           <ul class="info-box">
             <li>📌 Orden de trabajo: <span class="highlight">${orderCode}</span></li>
             <li>🏢 Empresa: <span class="highlight">${companyName}</span></li>
-            <li>📅 Fecha de inicio: <span class="highlight">${dateStartWork}</span></li>
+            <li>📅 Fecha de inicio: <span class="highlight">${formatToTextDate(dateStartWork)}</span></li>
             <li>⏰ Hora de inicio: <span class="highlight">${hourStartWork}</span></li>
             <li>📍 Lugar de trabajo: <span class="highlight">${locationWork}</span></li>
             <li>📝 Observaciones: <span class="highlight">${observations || 'N/A'}</span></li>

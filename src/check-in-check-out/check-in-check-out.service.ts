@@ -320,10 +320,10 @@ export class CheckInCheckOutService {
                     userDetail: true,
                   },
                 },
-              },
+              },                            
             },
           },
-        },
+        }, 
       },
     });
     if (!workOrder) {
@@ -343,6 +343,9 @@ export class CheckInCheckOutService {
         });
         (wa.collaborator as any).hasCheckedIn = !!checkIn;
         (wa.collaborator as any).hasCheckedOut = !!checkOut;
+        // agregar la hora de check-in y check-out del colaborador
+        (wa.collaborator as any).checkInTime = checkIn?.startTime;
+        (wa.collaborator as any).checkOutTime = checkOut?.finalTime;
       }
     }
     return workOrder;
