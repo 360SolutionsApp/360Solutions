@@ -8,10 +8,11 @@ import { ReportOrderAssignToSupervisorMailerService } from './report-email-super
 import { ZohoMailModule } from 'src/mailer/zoho-mailer.module';
 import { WorkOrderAcceptService } from 'src/work-order-accept/work-order-accept.service';
 import { WorkOrderAcceptModule } from 'src/work-order-accept/work-order-accept.module';
+import { WorkOrderAcceptGateway } from 'src/work-order-accept/orders.gateway';
 
 @Module({
   controllers: [OrdersAssignToCollabsController],
-  providers: [OrdersAssignToCollabsService, PrismaService, ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService, WorkOrderAcceptService],
+  providers: [OrdersAssignToCollabsService, PrismaService, ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService, WorkOrderAcceptService, WorkOrderAcceptGateway],
   exports: [ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService],
   imports: [ZohoMailModule, WorkOrderAcceptModule],
 })

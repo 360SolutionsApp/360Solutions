@@ -8,6 +8,7 @@ import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.
 import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
 import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
 import { WorkOrderAcceptService } from 'src/work-order-accept/work-order-accept.service';
+import { WorkOrderAcceptGateway } from 'src/work-order-accept/orders.gateway';
 
 @Injectable()
 export class OrdersAssignToCollabsService {
@@ -15,7 +16,8 @@ export class OrdersAssignToCollabsService {
     private prisma: PrismaService,
     private reportEmailService: ReportOrderAssignToCollabsMailerService,
     private reportOrderAssignToSupervisorMailerService: ReportOrderAssignToSupervisorMailerService,
-    private workOrderAcceptService: WorkOrderAcceptService
+    private workOrderAcceptService: WorkOrderAcceptService,
+    private workOrderGateway: WorkOrderAcceptGateway
   ) { }
 
   async create(createOrdersAssignToCollabDto: CreateOrdersAssignToCollabDto) {
@@ -567,7 +569,6 @@ export class OrdersAssignToCollabsService {
       },
     });
 
-    // 🟢 3.1 Crear o actualizar registro en orderAcceptByCollab
     for (const collab of collaboratorsList) {
       const existingAccept = await this.prisma.orderAcceptByCollab.findFirst({
         where: {
@@ -576,21 +577,70 @@ export class OrdersAssignToCollabsService {
         },
       });
 
+      let result;
+
       if (existingAccept) {
-        // Si ya existe, actualiza (por ejemplo, lo reseteamos a null al reasignar)
-        await this.prisma.orderAcceptByCollab.update({
+        result = await this.prisma.orderAcceptByCollab.update({
           where: { id: existingAccept.id },
           data: { acceptWorkOrder: false },
         });
       } else {
-        // Si no existe, crea uno nuevo
-        await this.prisma.orderAcceptByCollab.create({
+        result = await this.prisma.orderAcceptByCollab.create({
           data: {
             collaboratorId: collab.collaboratorId,
             workOrderId: updatedAssignment.workOrder.id,
             acceptWorkOrder: false,
           },
         });
+      }
+
+      // ✅ Obtener datos desde orderAssignToCollabs
+      const enriched = await this.prisma.orderAssignToCollabs.findFirst({
+        where: {
+          workOrderId: updatedAssignment.workOrder.id,
+          worksAssigned: {
+            some: { collaboratorId: collab.collaboratorId },
+          },
+        },
+        select: {
+          id: true,
+          orderWorkDateStart: true,
+          orderWorkHourStart: true,
+          orderLocationWork: true,
+          workOrderStatus: true,
+          worksAssigned: {
+            where: { collaboratorId: collab.collaboratorId },
+            select: {
+              assignment: { select: { title: true } },
+            },
+          },
+          workOrder: {
+            select: {
+              workOrderCodePo: true,
+              clientCompany: { select: { companyName: true } },
+            },
+          },
+        },
+      });
+
+      if (enriched) {
+        const payload = {
+          id: result.id,
+          orderAssignId: enriched.id,
+          workOrderCodePo: enriched.workOrder?.workOrderCodePo ?? 'N/A',
+          workOrderStatus: enriched.workOrderStatus,
+          companyName: enriched.workOrder?.clientCompany?.companyName ?? 'N/A',
+          workLocation: enriched.orderLocationWork,
+          workStartDate: enriched.orderWorkDateStart,
+          workStartHour: enriched.orderWorkHourStart,
+          assignments: enriched.worksAssigned.map((w) => w.assignment?.title ?? ''),
+        };
+
+        try {
+          this.workOrderGateway?.notifyPendingOrders(collab.collaboratorId, payload);
+        } catch (error) {
+          console.warn('⚠️ No se pudo emitir evento WebSocket:', error.message);
+        }
       }
     }
 

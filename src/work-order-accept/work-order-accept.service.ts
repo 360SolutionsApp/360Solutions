@@ -5,17 +5,24 @@ import { CreateWorkOrderAcceptDto } from './dto/create-work-order-accept.dto';
 import { UpdateWorkOrderAcceptDto } from './dto/update-work-order-accept.dto';
 import { PrismaService } from 'src/prisma.service';
 import { OrderRejectionMailerService } from './report-update-accept-collab.service';
+import { WorkOrderAcceptGateway } from './orders.gateway';
 
 @Injectable()
 export class WorkOrderAcceptService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly orderRejectionMailer: OrderRejectionMailerService
+    private readonly orderRejectionMailer: OrderRejectionMailerService,
+    private readonly gateway: WorkOrderAcceptGateway
   ) { }
 
   async create(createWorkOrderAcceptDto: CreateWorkOrderAcceptDto) {
     const assignmentAccept = await this.prisma.orderAcceptByCollab.create({ data: createWorkOrderAcceptDto });
+
+    // Emitir actualización
+    const pendingOrders = await this.findAllPendingByCollaborator(createWorkOrderAcceptDto.collaboratorId);
+    this.gateway.notifyPendingOrders(createWorkOrderAcceptDto.collaboratorId, pendingOrders);
+
     return assignmentAccept;
   }
 
@@ -160,6 +167,7 @@ export class WorkOrderAcceptService {
         id: true,          // 👈 agregamos el id
         workOrderId: true, // para vincular con el resto
       },
+      distinct: ['workOrderId'], // evita duplicados
     });
 
     if (pendingInDb.length === 0) return [];
@@ -210,6 +218,8 @@ export class WorkOrderAcceptService {
     const existing = await this.prisma.orderAcceptByCollab.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Registro no encontrado');
 
+    const collaboratorId = existing.collaboratorId;
+
     // 1️⃣ Si el colaborador rechaza la orden
     if (updateWorkOrderAcceptDto.acceptWorkOrder === false) {
       await this.prisma.workersAssignToOrder.deleteMany({
@@ -231,6 +241,12 @@ export class WorkOrderAcceptService {
         where: { id },
         data: updateWorkOrderAcceptDto,
       });
+
+      // Consultar las órdenes pendientes actualizadas
+      const pendingOrders = await this.findAllPendingByCollaborator(collaboratorId);
+
+      // Notificar al colaborador
+      this.gateway.notifyPendingOrders(collaboratorId, pendingOrders);
 
       return {
         message: `El colaborador ${existing.collaboratorId} fue removido de la orden ${existing.workOrderId} por rechazarla.`,
@@ -274,6 +290,10 @@ export class WorkOrderAcceptService {
         message: `El colaborador ${collaboratorId} fue removido de la orden ${workOrderId} por no aceptarla.`,
       };
     }
+
+    // Emitir actualización
+    const pendingOrders = await this.findAllPendingByCollaborator(collaboratorId);
+    this.gateway.notifyPendingOrders(collaboratorId, pendingOrders);
 
     // 4️⃣ Si ya aceptó, no se elimina
     return {
