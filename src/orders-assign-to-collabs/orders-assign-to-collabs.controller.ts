@@ -19,9 +19,7 @@ export class OrdersAssignToCollabsController {
   @UseGuards(JwtAuthGuard)
   @Get()
   findAll(@Query() query: PaginationDto, @Req() req) {
-  
-      const user = req.user;
-  
+    const user = req.user;
     return this.ordersAssignToCollabsService.findAll(query, user);
   }
 

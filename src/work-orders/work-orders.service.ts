@@ -133,6 +133,15 @@ export class WorkOrdersService {
           some: { worksAssigned: { some: { collaboratorId: userId } } },
         },
         workOrderStatus: { not: 'DELETE' },
+        orderAcceptByCollab: {
+          some: {
+            collaboratorId: userId,
+            OR: [
+              { acceptWorkOrder: { equals: true } }, // ✅ aceptadas
+              { acceptWorkOrder: { equals: null } }, // ✅ sin valor (antiguas)
+            ],
+          },
+        },
       };
     } else {
       whereCondition = { workOrderStatus: { not: 'DELETE' } };

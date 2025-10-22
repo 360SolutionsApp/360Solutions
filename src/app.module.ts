@@ -14,6 +14,7 @@ import { OrdersAssignToCollabsModule } from './orders-assign-to-collabs/orders-a
 import { CheckInCheckOutModule } from './check-in-check-out/check-in-check-out.module';
 import { ZohoMailModule } from './mailer/zoho-mailer.module';
 import { MailerController } from './mailer/zoho-mailer.controller';
+import { WorkOrderAcceptModule } from './work-order-accept/work-order-accept.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { MailerController } from './mailer/zoho-mailer.controller';
     OrdersAssignToCollabsModule,
     CheckInCheckOutModule,
     ZohoMailModule,
+    WorkOrderAcceptModule,
   ],
   controllers: [AppController, MailerController],
   providers: [AppService],

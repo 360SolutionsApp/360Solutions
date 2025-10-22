@@ -3,6 +3,7 @@ import { IsInt, IsNotEmpty, IsArray, IsOptional, ValidateNested, IsEnum, IsStrin
 import { Type } from 'class-transformer';
 
 export enum WorkOrderStatus {
+    ACCEPT = 'ACCEPT',
     PENDING = 'PENDING',
     PARTIALLY_RUNNING = 'PARTIALLY_RUNNING',
     RUNNING = 'RUNNING',

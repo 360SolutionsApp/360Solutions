@@ -73,7 +73,7 @@ export class ReportOrderAssignToCollabsMailerService {
           <div class="assignments">${assignmentsHtml}</div>
 
           <p>Por favor, ingresa a <a href="${process.env.DOMAIN_URL}" target="_blank">${process.env.DOMAIN_URL}</a> para más detalles.<br>
-          <strong>No olvides realizar tu checkIn al iniciar tus actividades y checkOut al finalizarlas desde la plataforma.</strong></p>
+          <strong>No olvides que primero debes <b>aceptar</b> la orden de trabajo para poder realizar tu <b>checkIn</b> al iniciar tus actividades y <b>checkOut</b> al finalizarlas desde la plataforma.</strong></p>
 
           <div class="footer">
             <p>Este es un correo automático enviado por <strong>360 Solutions</strong>. No responder directamente.</p>

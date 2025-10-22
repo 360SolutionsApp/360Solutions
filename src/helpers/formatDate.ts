@@ -17,6 +17,7 @@ export function formatToTextDate(dateString: string): string {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    timeZone: 'UTC',
   };
 
   // 2. Crear objeto Date y formatear usando 'en-US' para las abreviaciones.

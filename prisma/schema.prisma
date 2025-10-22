@@ -26,6 +26,8 @@ model User {
   checkIn checkIn[]
 
   checkOut checkOut[]
+
+  orderAcceptByCollab orderAcceptByCollab[]
 }
 
 model UserDetail {
@@ -147,6 +149,7 @@ model ContractClient {
 }
 
 enum WorkOrderStatus {
+  ACCEPT // 0
   PENDING // 1
   PARTIALLY_RUNNING // 2
   RUNNING // 3
@@ -173,9 +176,9 @@ model workOrder {
 
   workOrderStatus   WorkOrderStatus? @default(PENDING)
   userEmailRegistry String
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime?       @updatedAt
-  ContractClient    ContractClient? @relation(fields: [contractClientId], references: [id], onDelete: Restrict)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime?        @updatedAt
+  ContractClient    ContractClient?  @relation(fields: [contractClientId], references: [id], onDelete: Restrict)
   contractClientId  Int?
 
   clientId      Int?
@@ -186,6 +189,8 @@ model workOrder {
   checkIn checkIn[]
 
   checkOut checkOut[]
+
+  orderAcceptByCollab orderAcceptByCollab[]
 }
 
 model assignmentQuantityForWorkOrder {
@@ -215,7 +220,7 @@ model orderAssignToCollabs {
 
   worksAssigned workersAssignToOrder[]
 
-  workOrderStatus   WorkOrderStatus? @default(PENDING)
+  workOrderStatus WorkOrderStatus? @default(PENDING)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt
@@ -232,6 +237,21 @@ model workersAssignToOrder {
 
   assignmentId Int?
   assignment   Assignment? @relation(fields: [assignmentId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model orderAcceptByCollab {
+  id Int @id @default(autoincrement())
+
+  collaboratorId Int?
+  collaborator   User? @relation(fields: [collaboratorId], references: [id])
+
+  workOrderId Int?
+  workOrder   workOrder? @relation(fields: [workOrderId], references: [id])
+
+  acceptWorkOrder Boolean? @default(false)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt

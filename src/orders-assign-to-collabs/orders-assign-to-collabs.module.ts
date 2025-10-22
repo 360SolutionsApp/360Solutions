@@ -6,11 +6,13 @@ import { PrismaService } from 'src/prisma.service';
 import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.service';
 import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
 import { ZohoMailModule } from 'src/mailer/zoho-mailer.module';
+import { WorkOrderAcceptService } from 'src/work-order-accept/work-order-accept.service';
+import { WorkOrderAcceptModule } from 'src/work-order-accept/work-order-accept.module';
 
 @Module({
   controllers: [OrdersAssignToCollabsController],
-  providers: [OrdersAssignToCollabsService, PrismaService, ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService],
+  providers: [OrdersAssignToCollabsService, PrismaService, ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService, WorkOrderAcceptService],
   exports: [ReportOrderAssignToCollabsMailerService, ReportOrderAssignToSupervisorMailerService],
-  imports: [ZohoMailModule],
+  imports: [ZohoMailModule, WorkOrderAcceptModule],
 })
 export class OrdersAssignToCollabsModule {}

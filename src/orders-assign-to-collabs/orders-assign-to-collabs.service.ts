@@ -7,13 +7,15 @@ import { PaginationDto } from 'src/helpers/pagination.dto';
 import { ReportOrderAssignToCollabsMailerService } from './report-email-collabs.service';
 import { ReportOrderAssignToSupervisorMailerService } from './report-email-supervisor.service';
 import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
+import { WorkOrderAcceptService } from 'src/work-order-accept/work-order-accept.service';
 
 @Injectable()
 export class OrdersAssignToCollabsService {
   constructor(
     private prisma: PrismaService,
     private reportEmailService: ReportOrderAssignToCollabsMailerService,
-    private reportOrderAssignToSupervisorMailerService: ReportOrderAssignToSupervisorMailerService
+    private reportOrderAssignToSupervisorMailerService: ReportOrderAssignToSupervisorMailerService,
+    private workOrderAcceptService: WorkOrderAcceptService
   ) { }
 
   async create(createOrdersAssignToCollabDto: CreateOrdersAssignToCollabDto) {
@@ -53,53 +55,6 @@ export class OrdersAssignToCollabsService {
         'Algunos colaboradores no existen o no tienen el rol correcto',
       );
     }
-
-    /*
-    // 4️⃣ Verificar órdenes activas
-    const activeAssignments = await this.prisma.workersAssignToOrder.findMany({
-      where: {
-        collaboratorId: { in: collaboratorIdsList },
-        orderAssignToCollab: {
-          workOrder: {
-            workOrderStatus: {
-              notIn: ['CLOSED', 'CANCELED', 'INACTIVE'],
-            },
-          },
-        },
-      },
-      include: {
-        collaborator: { include: { userDetail: true } },
-        orderAssignToCollab: {
-          include: {
-            workOrder: {
-              select: {
-                id: true,
-                workOrderCodePo: true,
-                workOrderStatus: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (activeAssignments.length > 0) {
-      const pendingList = activeAssignments.map((a) => {
-        const name = a.collaborator.userDetail
-          ? `${a.collaborator.userDetail.names} ${a.collaborator.userDetail.lastNames}`
-          : a.collaborator.email;
-        const code =
-          a.orderAssignToCollab.workOrder.workOrderCodePo ??
-          `#${a.orderAssignToCollab.workOrder.id}`;
-        const status = a.orderAssignToCollab.workOrder.workOrderStatus;
-        return `${name} (Orden ${code}, Estado: ${status})`;
-      });
-
-      throw new BadRequestException(
-        `Los siguientes colaboradores tienen órdenes pendientes: ${pendingList.join(', ')}`,
-      );
-    }
-      */
 
     // 5️⃣ Crear la asignación principal
     try {
@@ -152,6 +107,19 @@ export class OrdersAssignToCollabsService {
           },
         },
       });
+
+      // ✅ Crear registros de aceptación para cada colaborador
+      const uniqueCollaborators = [
+        ...new Set(newAssignment.worksAssigned.map((w) => w.collaborator.id)),
+      ];
+
+      for (const collaboratorId of uniqueCollaborators) {
+        await this.workOrderAcceptService.create({
+          collaboratorId,
+          workOrderId,
+          acceptWorkOrder: false,
+        });
+      }
 
       // 6️⃣ Datos del cliente
       const company =
@@ -598,6 +566,33 @@ export class OrdersAssignToCollabsService {
         },
       },
     });
+
+    // 🟢 3.1 Crear o actualizar registro en orderAcceptByCollab
+    for (const collab of collaboratorsList) {
+      const existingAccept = await this.prisma.orderAcceptByCollab.findFirst({
+        where: {
+          collaboratorId: collab.collaboratorId,
+          workOrderId: updatedAssignment.workOrder.id,
+        },
+      });
+
+      if (existingAccept) {
+        // Si ya existe, actualiza (por ejemplo, lo reseteamos a null al reasignar)
+        await this.prisma.orderAcceptByCollab.update({
+          where: { id: existingAccept.id },
+          data: { acceptWorkOrder: false },
+        });
+      } else {
+        // Si no existe, crea uno nuevo
+        await this.prisma.orderAcceptByCollab.create({
+          data: {
+            collaboratorId: collab.collaboratorId,
+            workOrderId: updatedAssignment.workOrder.id,
+            acceptWorkOrder: false,
+          },
+        });
+      }
+    }
 
     // 4️⃣ Datos del cliente y supervisor
     const order = updatedAssignment.workOrder;
