@@ -44,23 +44,32 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Contar cuántos colaboradores han hecho check-in (ahora incluye al nuevo check-in)
+      // Obtener colaboradores únicos asignados a la orden
+      const assignedCollabIds = [
+        ...new Set(assignedCollabsOrder.map(c => c.collaboratorId)),
+      ];
+
+      const totalCollabs = assignedCollabIds.length;
+
+      // Contar cuántos colaboradores han hecho check-in
       const checkInsCount = await this.prisma.checkIn.count({
-        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+        where: { orderId, userCollabId: { in: assignedCollabIds } },
       });
 
-      console.log('Check-ins encontrados:', checkInsCount);
+      console.log(`Total colaboradores: ${totalCollabs}, con check-in: ${checkInsCount}`);
 
-      // Comparamos si la cantidad de check-ins es igual a la cantidad de colaboradores asignados
-      console.log('colaboradores que ya han hecho check-in en esta orden.', checkInsCount, assignedCollabsOrder.length);
-
-      // Actualizar estado de la orden
+      // Determinar nuevo estado según la cantidad de colaboradores
       let newStatus: workOrderStatus;
 
-      if (checkInsCount === assignedCollabsOrder.length) {
-        newStatus = workOrderStatus.RUNNING; // Todos hicieron check-in
-      } else {
-        newStatus = workOrderStatus.PARTIALLY_RUNNING; // Al menos uno, pero no todos
+      if (totalCollabs === 1 && checkInsCount === 1) {
+        // Solo 1 colaborador y ya hizo check-in
+        newStatus = workOrderStatus.RUNNING;
+      } else if (totalCollabs > 1 && checkInsCount < totalCollabs) {
+        // Más de un colaborador y solo algunos hicieron check-in
+        newStatus = workOrderStatus.PARTIALLY_RUNNING;
+      } else if (totalCollabs > 1 && checkInsCount === totalCollabs) {
+        // Todos los colaboradores hicieron check-in
+        newStatus = workOrderStatus.RUNNING;
       }
 
       await this.prisma.workOrder.update({
@@ -91,23 +100,29 @@ export class CheckInCheckOutService {
         },
       });
 
-      // Contar cuántos colaboradores han hecho check-out (ahora incluye al nuevo check-out)
+      // Obtener colaboradores únicos asignados a la orden
+      const assignedCollabIds = [
+        ...new Set(assignedCollabsOrder.map(c => c.collaboratorId)),
+      ];
+
+      const totalCollabs = assignedCollabIds.length;
+
+      // Contar cuántos colaboradores han hecho check-out
       const checkOutsCount = await this.prisma.checkOut.count({
-        where: { orderId, userCollabId: { in: assignedCollabsOrder.map(c => c.collaboratorId) } },
+        where: { orderId, userCollabId: { in: assignedCollabIds } },
       });
 
-      console.log('Check-outs encontrados:', checkOutsCount);
+      console.log(`Total colaboradores: ${totalCollabs}, con check-out: ${checkOutsCount}`);
 
-      // Comparamos si la cantidad de check-outs es igual a la cantidad de colaboradores asignados
-      console.log('colaboradores que ya han hecho check-out en esta orden.', checkOutsCount, assignedCollabsOrder.length);
-
-      // Actualizar estado de la orden
+      // Determinar nuevo estado según la cantidad de colaboradores
       let newStatus: workOrderStatus;
 
-      if (checkOutsCount === assignedCollabsOrder.length) {
-        newStatus = workOrderStatus.CLOSED; // Todos hicieron check-out
-      } else {
-        newStatus = workOrderStatus.PARTIALLY_CLOSED; // Algunos han hecho check-out, pero no todos
+      if (totalCollabs === 1 && checkOutsCount === 1) {
+        newStatus = workOrderStatus.CLOSED;
+      } else if (totalCollabs > 1 && checkOutsCount < totalCollabs) {
+        newStatus = workOrderStatus.PARTIALLY_CLOSED;
+      } else if (totalCollabs > 1 && checkOutsCount === totalCollabs) {
+        newStatus = workOrderStatus.CLOSED;
       }
 
       await this.prisma.workOrder.update({
@@ -117,7 +132,6 @@ export class CheckInCheckOutService {
 
       return checkOut;
     }
-
 
     else {
       throw new BadRequestException('Tipo de registro inválido. Use IN o OUT.');
@@ -304,8 +318,12 @@ export class CheckInCheckOutService {
 
   // Listar los colaboradores asignados a una orden con su estado de check-in y check-out
   // Listar los colaboradores asignados así no hayan hecho check-in o check-out pero mostrar el estado de la orden
+  // Listar los colaboradores asignados a una orden con su estado de check-in y check-out
+  // ✅ Mantiene la estructura original de orderAssignToCollab
+  // ✅ Añade un array workOrder.uniqueCollaborators con los colaboradores únicos enriquecidos
+  // Listar los colaboradores asignados a una orden con su estado de check-in y check-out
   async listCollaboratorsWithCheckInStatus(workOrderId: number) {
-    // Obtener la orden de trabajo con sus colaboradores asignados
+    // 1️⃣ Obtener la orden con sus asignaciones
     const workOrder = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: {
@@ -320,36 +338,77 @@ export class CheckInCheckOutService {
                     userDetail: true,
                   },
                 },
-              },                            
+              },
             },
           },
-        }, 
+        },
       },
     });
+
     if (!workOrder) {
       throw new BadRequestException(`No se encontró la orden de trabajo con id ${workOrderId}`);
     }
 
-    // Map workOrder to include check-in and check-out status for each collaborator
+    // 2️⃣ Recolectar todos los IDs únicos de colaboradores
+    const collaboratorIds: number[] = [];
     for (const assign of workOrder.orderAssignToCollab) {
       for (const wa of assign.worksAssigned) {
-        // Buscar si este colaborador tiene check-in
-        const checkIn = await this.prisma.checkIn.findFirst({
-          where: { orderId: workOrderId, userCollabId: wa.collaborator.id },
-        });
-        // Buscar si este colaborador tiene check-out
-        const checkOut = await this.prisma.checkOut.findFirst({
-          where: { orderId: workOrderId, userCollabId: wa.collaborator.id },
-        });
-        (wa.collaborator as any).hasCheckedIn = !!checkIn;
-        (wa.collaborator as any).hasCheckedOut = !!checkOut;
-        // agregar la hora de check-in y check-out del colaborador
-        (wa.collaborator as any).checkInTime = checkIn?.startTime;
-        (wa.collaborator as any).checkOutTime = checkOut?.finalTime;
+        if (wa.collaborator?.id) {
+          collaboratorIds.push(wa.collaborator.id);
+        }
       }
     }
+
+    const uniqueCollaboratorIds = Array.from(new Set(collaboratorIds));
+
+    // 3️⃣ Consultar todos los checkIns y checkOuts en una sola pasada
+    const [checkIns, checkOuts] = await Promise.all([
+      this.prisma.checkIn.findMany({
+        where: { orderId: workOrderId, userCollabId: { in: uniqueCollaboratorIds } },
+        select: { userCollabId: true, startTime: true },
+      }),
+      this.prisma.checkOut.findMany({
+        where: { orderId: workOrderId, userCollabId: { in: uniqueCollaboratorIds } },
+        select: { userCollabId: true, finalTime: true },
+      }),
+    ]);
+
+    // 4️⃣ Crear mapas para acceso rápido
+    const checkInMap = new Map<number, string>();
+    const checkOutMap = new Map<number, string>();
+
+    for (const ci of checkIns) checkInMap.set(ci.userCollabId, ci.startTime);
+    for (const co of checkOuts) checkOutMap.set(co.userCollabId, co.finalTime);
+
+    // 5️⃣ Limpiar duplicados dentro de worksAssigned
+    for (const assign of workOrder.orderAssignToCollab) {
+      const uniqueWorksAssigned: any[] = [];
+
+      const seenCollaborators = new Set<number>();
+
+      for (const wa of assign.worksAssigned) {
+        const collabId = wa.collaborator?.id;
+
+        if (collabId && !seenCollaborators.has(collabId)) {
+          seenCollaborators.add(collabId);
+
+          // Agregar info de check-in / check-out directamente al colaborador
+          (wa.collaborator as any).hasCheckedIn = checkInMap.has(collabId);
+          (wa.collaborator as any).hasCheckedOut = checkOutMap.has(collabId);
+          (wa.collaborator as any).checkInTime = checkInMap.get(collabId) ?? null;
+          (wa.collaborator as any).checkOutTime = checkOutMap.get(collabId) ?? null;
+
+          uniqueWorksAssigned.push(wa);
+        }
+      }
+
+      assign.worksAssigned = uniqueWorksAssigned;
+    }
+
+    // 6️⃣ Retornar la estructura original pero sin duplicados
     return workOrder;
   }
+
 
   async update(
     id: number,
