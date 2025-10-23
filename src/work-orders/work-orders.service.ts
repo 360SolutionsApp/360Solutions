@@ -173,6 +173,14 @@ export class WorkOrdersService {
               collaborator: {
                 select: { id: true, email: true }, // 🔒
               },
+              assignment: {
+                select: {
+                  id: true,
+                  title: true,
+                  costPerHour: true,
+                  assignmentType: true,
+                },
+              },
             },
           },
         },
@@ -209,6 +217,26 @@ export class WorkOrdersService {
   async findOne(id: number) {
     const workOrderAssignments = await this.prisma.orderAssignToCollabs.findMany({
       where: { workOrderId: id },
+      include: {
+        worksAssigned: {
+          include: {
+            collaborator: {
+              select: {
+                id: true,
+                email: true,
+                userDetail: true, // opcional si quieres ver más datos
+              },
+            },
+            assignment: {
+              select: {
+                id: true,
+                title: true,
+                costPerHour: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const workOrder = await this.prisma.workOrder.findUnique({
