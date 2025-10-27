@@ -286,7 +286,14 @@ export class WorkOrdersService {
     } = dto;
 
     try {
-      return await this.prisma.workOrder.update({
+      // 1️⃣ Buscar si existen asignaciones relacionadas
+      const existingAssignments = await this.prisma.orderAssignToCollabs.findMany({
+        where: { workOrderId: id },
+        select: { id: true },
+      });
+
+      // 2️⃣ Ejecutar la actualización de la orden
+      const updatedWorkOrder = await this.prisma.workOrder.update({
         where: { id },
         data: {
           ...(clientId !== undefined && { clientId }),
@@ -326,6 +333,21 @@ export class WorkOrdersService {
           },
         },
       });
+
+      // 3️⃣ Si existen asignaciones, actualízalas en paralelo
+      if (existingAssignments.length > 0) {
+        await this.prisma.orderAssignToCollabs.updateMany({
+          where: { workOrderId: id },
+          data: {
+            ...(workOrderStatus !== undefined && { workOrderStatus }),
+            ...(orderWorkHourStart !== undefined && { orderWorkHourStart }),
+            ...(workOrderStartDate !== undefined && { orderWorkDateStart: workOrderStartDate }),
+            ...(workOrderEndDate !== undefined && { orderWorkDateEnd: workOrderEndDate }),
+          },
+        });
+      }
+
+      return updatedWorkOrder;
     } catch (error) {
       throw new BadRequestException(
         `Error actualizando la orden de trabajo: ${error.message}`,
