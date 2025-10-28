@@ -16,4 +16,12 @@ export class CreateWorkOrderAcceptDto {
     @IsOptional()
     @IsBoolean({ message: 'El valor de aceptación debe ser booleano (true o false)' })
     acceptWorkOrder?: boolean = false;
+
+    @IsOptional()
+    @IsBoolean({ message: 'El valor de confirmación debe ser booleano (true o false)' })
+    confirmWorkOrder?: boolean = false;
+
+    @IsOptional()
+    @IsBoolean({ message: 'El valor de marcado como leído debe ser booleano (true o false)' })
+    markedAtAsRead?: boolean = false;
 }

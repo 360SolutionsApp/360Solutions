@@ -252,6 +252,8 @@ model orderAcceptByCollab {
   workOrder   workOrder? @relation(fields: [workOrderId], references: [id])
 
   acceptWorkOrder Boolean? @default(false)
+  confirmWorkOrder Boolean? @default(false)
+  markedAtAsRead  Boolean? @default(false)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt

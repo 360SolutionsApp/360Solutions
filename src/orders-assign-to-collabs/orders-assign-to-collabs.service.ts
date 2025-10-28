@@ -225,6 +225,13 @@ export class OrdersAssignToCollabsService {
         );
       }
 
+      // 🔔 Notificar a los administradores que hay cambios globales
+      try {
+        this.workOrderGateway.notifyOrdersUpdate();
+      } catch (error) {
+        console.warn('⚠️ No se pudo emitir actualización global:', error.message);
+      }
+
       // 1️⃣1️⃣ Retornar respuesta agrupada
       return {
         id: newAssignment.id,
@@ -640,6 +647,14 @@ export class OrdersAssignToCollabsService {
           this.workOrderGateway?.notifyPendingOrders(collab.collaboratorId, payload);
         } catch (error) {
           console.warn('⚠️ No se pudo emitir evento WebSocket:', error.message);
+        }
+
+        try {
+          this.workOrderGateway.notifyOrdersUpdate();
+          this.workOrderGateway.notifyOrdersUpdate();
+          this.workOrderGateway.notifyNotConfirmedOrders('');
+        } catch (error) {
+          console.warn('⚠️ No se pudo emitir actualización global:', error.message);
         }
       }
     }

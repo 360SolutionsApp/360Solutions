@@ -6,6 +6,7 @@ import { UpdateWorkOrderAcceptDto } from './dto/update-work-order-accept.dto';
 import { PrismaService } from 'src/prisma.service';
 import { OrderRejectionMailerService } from './report-update-accept-collab.service';
 import { WorkOrderAcceptGateway } from './orders.gateway';
+import { PaginationDto } from 'src/helpers/pagination.dto';
 
 @Injectable()
 export class WorkOrderAcceptService {
@@ -27,8 +28,68 @@ export class WorkOrderAcceptService {
   }
 
   // retornar todas las ordenes aceptadas y no aceptadas
-  async findAll() {
-    const all = await this.prisma.orderAcceptByCollab.findMany({
+  async findAll(params?: PaginationDto) {
+    // Verificar si hay parámetros de paginación válidos
+    const page = params?.page ? Number(params.page) : undefined;
+    const limit = params?.limit ? Number(params.limit) : undefined;
+
+    // Si no hay paginación → devolver todos los registros
+    if (!page || !limit) {
+      const all = await this.prisma.orderAcceptByCollab.findMany({
+        include: {
+          collaborator: {
+            select: {
+              id: true,
+              email: true,
+              userDetail: {
+                select: {
+                  names: true,
+                  lastNames: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+          workOrder: {
+            select: {
+              id: true,
+              workOrderCodePo: true,
+              workOrderStatus: true,
+              workOrderStartDate: true,
+              workOrderEndDate: true,
+              clientCompany: {
+                select: {
+                  id: true,
+                  companyName: true,
+                },
+              },
+              orderAssignToCollab: {
+                select: {
+                  id: true,
+                  orderWorkDateStart: true,
+                  orderWorkDateEnd: true,
+                  orderWorkHourStart: true,
+                  orderLocationWork: true,
+                  orderObservations: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return all;
+    }
+
+    // Con paginación
+    const skip = (page - 1) * limit;
+
+    const total = await this.prisma.orderAcceptByCollab.count();
+
+    const data = await this.prisma.orderAcceptByCollab.findMany({
+      skip,
+      take: limit,
       include: {
         collaborator: {
           select: {
@@ -72,44 +133,80 @@ export class WorkOrderAcceptService {
       orderBy: { createdAt: 'desc' },
     });
 
-    //  formatear el resultado para simplificar la respuesta
-    return all.map(item => ({
-      id: item.id,
-      acceptWorkOrder: item.acceptWorkOrder,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      collaborator: {
-        id: item.collaborator?.id,
-        email: item.collaborator?.email,
-        names: item.collaborator?.userDetail?.names,
-        lastNames: item.collaborator?.userDetail?.lastNames,
-        phone: item.collaborator?.userDetail?.phone,
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
       },
-      workOrder: {
-        id: item.workOrder?.id,
-        code: item.workOrder?.workOrderCodePo,
-        status: item.workOrder?.workOrderStatus,
-        startDate: item.workOrder?.workOrderStartDate,
-        endDate: item.workOrder?.workOrderEndDate,
-        clientCompany: item.workOrder?.clientCompany?.companyName,
-        assignments: item.workOrder?.orderAssignToCollab?.map(assign => ({
-          id: assign.id,
-          start: assign.orderWorkDateStart,
-          end: assign.orderWorkDateEnd,
-          hourStart: assign.orderWorkHourStart,
-          location: assign.orderLocationWork,
-          observations: assign.orderObservations,
-        })),
-      },
-    }));
+    };
   }
 
-  async findAllNotAccepted() {
-    const notAccepted = await this.prisma.orderAcceptByCollab.findMany({
-      where: { acceptWorkOrder: false },
+
+  async findAllNotAccepted(params?: PaginationDto) {
+    const page = params?.page ? Number(params.page) : undefined;
+    const limit = params?.limit ? Number(params.limit) : undefined;
+
+    // 🔹 Filtro base
+    const whereCondition = { acceptWorkOrder: false };
+
+    // 🔹 Si no hay paginación → devolver todo el listado
+    if (!page || !limit) {
+      const notAccepted = await this.prisma.orderAcceptByCollab.findMany({
+        where: whereCondition,
+        include: {
+          collaborator: {
+            select: {
+              id: true,
+              email: true,
+              userDetail: {
+                select: {
+                  names: true,
+                  lastNames: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+          workOrder: {
+            select: {
+              id: true,
+              workOrderCodePo: true,
+              workOrderStatus: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return notAccepted;
+    }
+
+    // 🔹 Con paginación → calcular skip y total
+    const skip = (page - 1) * limit;
+
+    const total = await this.prisma.orderAcceptByCollab.count({
+      where: whereCondition,
+    });
+
+    const data = await this.prisma.orderAcceptByCollab.findMany({
+      where: whereCondition,
+      skip,
+      take: limit,
       include: {
         collaborator: {
-          select: { id: true, email: true },
+          select: {
+            id: true,
+            email: true,
+            userDetail: {
+              select: {
+                names: true,
+                lastNames: true,
+                phone: true,
+              },
+            },
+          },
         },
         workOrder: {
           select: {
@@ -119,10 +216,19 @@ export class WorkOrderAcceptService {
           },
         },
       },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return notAccepted;
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
+
 
   async findAllPendingByCollaborator(collaboratorId: number) {
     // 1️⃣ Buscar todas las órdenes asignadas al colaborador
@@ -247,6 +353,9 @@ export class WorkOrderAcceptService {
 
       // Notificar al colaborador
       this.gateway.notifyPendingOrders(collaboratorId, pendingOrders);
+      // 🔥 Emitir notificaciones de actualización
+      this.gateway.notifyOrderAccepted(pendingOrders);
+      this.gateway.notifyOrdersUpdate(); // notifica a quienes escuchan listas
 
       return {
         message: `El colaborador ${existing.collaboratorId} fue removido de la orden ${existing.workOrderId} por rechazarla.`,
@@ -259,6 +368,104 @@ export class WorkOrderAcceptService {
       where: { id },
       data: updateWorkOrderAcceptDto,
     });
+  }
+
+  // Actualizamos la orden como leída
+  async markAsRead(id: number) {
+    const existing = await this.prisma.orderAcceptByCollab.findUnique({ where: { id } });
+    if (!existing) throw new BadRequestException('Registro no encontrado');
+
+    return this.prisma.orderAcceptByCollab.update({
+      where: { id },
+      data: { markedAtAsRead: true },
+    });
+  }
+
+  // Obtener todas las órdenes NO confirmadas (confirmWorkOrder = false)
+  // con detalle del colaborador y de la orden, con paginación opcional
+  async findAllNotConfirmed(params?: PaginationDto) {
+    const page = params?.page ? Number(params.page) : undefined;
+    const limit = params?.limit ? Number(params.limit) : undefined;
+
+    // 🔹 Filtro base
+    const whereCondition = { confirmWorkOrder: false, markedAtAsRead: false };
+
+    // 🔹 Sin paginación
+    if (!page || !limit) {
+      const notConfirmed = await this.prisma.orderAcceptByCollab.findMany({
+        where: whereCondition,
+        include: {
+          collaborator: {
+            select: {
+              id: true,
+              email: true,
+              userDetail: {
+                select: {
+                  names: true,
+                  lastNames: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+          workOrder: {
+            select: {
+              id: true,
+              workOrderCodePo: true,
+              workOrderStatus: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return notConfirmed;
+    }
+
+    // 🔹 Con paginación
+    const skip = (page - 1) * limit;
+
+    const total = await this.prisma.orderAcceptByCollab.count({
+      where: whereCondition,
+    });
+
+    const data = await this.prisma.orderAcceptByCollab.findMany({
+      where: whereCondition,
+      skip,
+      take: limit,
+      include: {
+        collaborator: {
+          select: {
+            id: true,
+            email: true,
+            userDetail: {
+              select: {
+                names: true,
+                lastNames: true,
+                phone: true,
+              },
+            },
+          },
+        },
+        workOrder: {
+          select: {
+            id: true,
+            workOrderCodePo: true,
+            workOrderStatus: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 
   async remove(collaboratorId: number, workOrderId: number) {
