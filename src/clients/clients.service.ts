@@ -23,7 +23,6 @@ export class ClientsService {
       throw new BadRequestException('User not found');
     }
 
-    // Preguntamos si el employerIdentificationNumber del cliente ya existe
     const existingClientCompany = await this.prisma.clientCompany.findFirst({
       where: { employerIdentificationNumber: createClientDto.employerIdentificationNumber },
     });
@@ -32,7 +31,6 @@ export class ClientsService {
       throw new BadRequestException('Ya existe un cliente con este número de identificación');
     }
 
-    // Preguntamos si el email del cliente ya existe
     const existingClient = await this.prisma.clientCompany.findUnique({
       where: { employerEmail: createClientDto.employerEmail },
     });
@@ -43,7 +41,6 @@ export class ClientsService {
       );
     }
 
-    // Preguntamos si el email del cliente existe como usuario
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createClientDto.employerEmail },
     });
@@ -54,7 +51,6 @@ export class ClientsService {
       );
     }
 
-    // Preguntamos si el documentNumber del cliente ya existe
     const existingClientCompanyDocumentNumber = await this.prisma.userDetail.findFirst({
       where: { documentNumber: createClientDto.employerIdentificationNumber },
     });
@@ -63,39 +59,57 @@ export class ClientsService {
       throw new BadRequestException('Ya existe un usuario con este número de identificación');
     }
 
-    // Datos del cliente (forzamos el usuario registrador)
     const dataSelf = {
       ...createClientDto,
       IdUserRegistering: user.id,
     };
 
     try {
+      const { id, valueAssignment, ...rest } = dataSelf;
 
-      const { id, ...rest } = dataSelf;
-      // 1. Crear el cliente
+      // 1️⃣ Crear el cliente
       const client = await this.prisma.clientCompany.create({
         data: rest,
       });
 
-      // 2. Armar el DTO del usuario cliente
+      // 2️⃣ Crear el usuario cliente
       const createUserDto = {
-        // si el nombre es una cadena de 4 palabras separadas por espacios
-        // se toman los primeras 2 palabras de lo contrario se toma la primera palabra antes del primer espacio
-        // y la segunda palabra despues del primer espacio
-        names: createClientDto.representativeName.trim().split(/\s+/).length > 2 ? createClientDto.representativeName.trim().split(/\s+/).slice(0, 2).join(' ') : createClientDto.representativeName.trim().split(/\s+/)[0],
-        lastNames: createClientDto.representativeName.trim().split(/\s+/).length > 2 ? createClientDto.representativeName.trim().split(/\s+/).slice(2).join(' ') : createClientDto.representativeName.trim().split(/\s+/)[1],
+        names:
+          createClientDto.representativeName.trim().split(/\s+/).length > 2
+            ? createClientDto.representativeName.trim().split(/\s+/).slice(0, 2).join(' ')
+            : createClientDto.representativeName.trim().split(/\s+/)[0],
+        lastNames:
+          createClientDto.representativeName.trim().split(/\s+/).length > 2
+            ? createClientDto.representativeName.trim().split(/\s+/).slice(2).join(' ')
+            : createClientDto.representativeName.trim().split(/\s+/)[1],
         documentTypeId: 1,
         documentNumber: createClientDto.employerIdentificationNumber,
         phone: createClientDto.employerPhone,
         email: createClientDto.employerEmail,
         currentCityId: createClientDto.clientCityId,
         address: createClientDto.clientAddress,
-        roleId: 3, // rol fijo de cliente
+        roleId: 3,
         assignmentIds: [],
       };
 
-      // 3. Crear el usuario cliente usando UsersService
       const userClient = await this.usersService.create(createUserDto);
+
+      // Si hay precios, guardarlos asociados al cliente
+      if (valueAssignment && valueAssignment.length > 0) {
+        const priceRecords = valueAssignment
+          .filter((p) => p.value !== null && p.value !== undefined) // 👈 evita nulos
+          .map((p) => ({
+            clientId: client.id,
+            assignmentId: p.assignmentId,
+            pricePerHour: p.value,
+          }));
+
+        if (priceRecords.length > 0) {
+          await this.prisma.clientPricePerAssignment.createMany({
+            data: priceRecords,
+          });
+        }
+      }
 
       return { client, userClient };
     } catch (error) {
@@ -103,26 +117,6 @@ export class ClientsService {
       throw new BadRequestException(error.message || 'Error creating client and user');
     }
   }
-
-  /*async uploadFile(userEmail: string, clientCompanyId: number, file: Express.Multer.File) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: userEmail },
-    });
-
-    if (!user) {
-      throw new BadRequestException('User not found');
-    }
-
-    try {
-      return await this.clientCompanyAttachmentService.uploadOrUpdateContractPdf(
-        file,
-        clientCompanyId,
-      );
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      throw new BadRequestException(error.message || 'Error uploading file');
-    }
-  }*/
 
   async findAll(params: PaginationDto) {
     const page = params.page ? Number(params.page) : undefined;
@@ -166,6 +160,11 @@ export class ClientsService {
         where: { id },
         include: {
           ContractClient: true,
+          ClientPricePerAssignment: {
+            include: {
+              assignment: true, // opcional, si deseas ver el nombre o datos de la asignación
+            },
+          },
         },
       });
 
@@ -208,6 +207,7 @@ export class ClientsService {
       }
     }
 
+    const { valueAssignment, ...rest } = updateClientDto;
     const dataSelf = {
       ...updateClientDto,
       IdUserRegistering: user.id,
@@ -227,10 +227,45 @@ export class ClientsService {
         throw new BadRequestException('User not found');
       }
 
-      return await this.prisma.clientCompany.update({
+      const updatedClient = await this.prisma.clientCompany.update({
         where: { id },
         data: dataSelf,
       });
+
+      // Actualizamos o insertamos precios por asignación (si se envían)
+      if (valueAssignment && valueAssignment.length > 0) {
+        for (const p of valueAssignment) {
+          // 🔹 Ignorar precios nulos o indefinidos
+          if (p.value === null || p.value === undefined) continue;
+
+          const existing = await this.prisma.clientPricePerAssignment.findFirst({
+            where: {
+              clientId: id,
+              assignmentId: p.assignmentId,
+            },
+          });
+
+          if (existing) {
+            // Si existe, actualizamos el precio
+            await this.prisma.clientPricePerAssignment.update({
+              where: { id: existing.id },
+              data: { pricePerHour: p.value },
+            });
+          } else {
+            // Si no existe, creamos uno nuevo
+            await this.prisma.clientPricePerAssignment.create({
+              data: {
+                clientId: id,
+                assignmentId: p.assignmentId,
+                pricePerHour: p.value,
+              },
+            });
+          }
+        }
+      }
+
+      return updatedClient;
+
     } catch (error) {
       console.error('Error updating client:', error);
       throw new BadRequestException(error.message || 'Error updating client');
@@ -267,7 +302,7 @@ export class ClientsService {
       const userId = await this.prisma.user.findUnique({
         where: { email: userClientEmail.employerEmail },
       });
-      
+
       // Eliminamos el usuario asignado al cliente
       await this.prisma.user.delete({
         where: { id: userId.id },

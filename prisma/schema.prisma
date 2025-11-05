@@ -28,6 +28,7 @@ model User {
   checkOut checkOut[]
 
   orderAcceptByCollab orderAcceptByCollab[]
+  Invoice             Invoice[]
 }
 
 model UserDetail {
@@ -109,6 +110,10 @@ model Assignment {
   userCostPerAssignment userCostPerAssignment[]
 
   workersAssignToOrder workersAssignToOrder[]
+
+  ClientPricePerAssignment ClientPricePerAssignment[]
+
+  Invoice Invoice[]
 }
 
 model ClientCompany {
@@ -127,6 +132,46 @@ model ClientCompany {
   ContractClient ContractClient[]
 
   workOrder workOrder[]
+
+  ClientPricePerAssignment ClientPricePerAssignment[]
+
+  Invoice Invoice[]
+}
+
+model ClientPricePerAssignment {
+  id       Int           @id @default(autoincrement())
+  clientId Int
+  client   ClientCompany @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  assignmentId Int
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  pricePerHour Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Invoice {
+  id       Int           @id @default(autoincrement())
+  clientId Int
+  client   ClientCompany @relation(fields: [clientId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  assignmentId Int
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+
+  orderAssignedId Int
+  orderAssigned   workOrder @relation(fields: [orderAssignedId], references: [id])
+
+  hoursWorked  Int
+  pricePerHour Int // ← Precio vigente al momento de facturar
+  totalAmount  Int // Calculado (hoursWorked * pricePerHour)
+
+  invoiceDate DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ContractClient {
@@ -191,6 +236,7 @@ model workOrder {
   checkOut checkOut[]
 
   orderAcceptByCollab orderAcceptByCollab[]
+  Invoice             Invoice[]
 }
 
 model assignmentQuantityForWorkOrder {
@@ -251,9 +297,9 @@ model orderAcceptByCollab {
   workOrderId Int?
   workOrder   workOrder? @relation(fields: [workOrderId], references: [id])
 
-  acceptWorkOrder Boolean? @default(false)
+  acceptWorkOrder  Boolean? @default(false)
   confirmWorkOrder Boolean? @default(false)
-  markedAtAsRead  Boolean? @default(false)
+  markedAtAsRead   Boolean? @default(false)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt

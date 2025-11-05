@@ -1,5 +1,15 @@
 /* eslint-disable prettier/prettier */
-import { IsInt, IsString, IsEmail, IsOptional, IsDate } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsString, IsEmail, IsOptional, IsDate, IsArray, ValidateNested, Min } from 'class-validator';
+
+class PriceDto {
+    @IsInt()
+    assignmentId: number;
+
+    @IsInt()
+    @Min(0)
+    value: number;
+}
 
 export class CreateClientDto {
     @IsOptional()
@@ -34,4 +44,11 @@ export class CreateClientDto {
     @IsOptional()
     @IsDate()
     updatedAt?: Date;
+
+    // precios por asignación al crear el cliente
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => PriceDto)
+    valueAssignment?: PriceDto[];
 }
