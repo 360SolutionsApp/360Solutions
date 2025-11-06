@@ -209,7 +209,7 @@ export class ClientsService {
 
     const { valueAssignment, ...rest } = updateClientDto;
     const dataSelf = {
-      ...updateClientDto,
+      ...rest,
       IdUserRegistering: user.id,
     };
 
