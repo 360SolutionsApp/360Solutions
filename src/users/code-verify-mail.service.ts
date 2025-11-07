@@ -1,19 +1,19 @@
 /* eslint-disable prettier/prettier */
-import { BadRequestException, Injectable } from '@nestjs/common'; 
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ZohoMailService } from 'src/mailer/zoho-mailer.service';
 
 @Injectable()
 export class CodeVerifyMailerService {
-    constructor(private readonly zohoMailService: ZohoMailService) { }
+  constructor(private readonly zohoMailService: ZohoMailService) { }
 
-    async sendVerificationCode(
-        email: string,
-        code: string,
-        token: string,
-        timeExpiration: number,
-    ) {
-        try {
-            const htmlTemplate = `
+  async sendVerificationCode(
+    email: string,
+    code: string,
+    token: string,
+    timeExpiration: number,
+  ) {
+    try {
+      const htmlTemplate = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -38,28 +38,28 @@ export class CodeVerifyMailerService {
           </div>
           <h2 class="header">Verificación de cuenta</h2>
           <p>Hola,</p>
-          <p>Estás a un paso de completar tu registro. Utiliza el siguiente código para verificar tu cuenta:</p>
+          <p>Estás a un paso de completar tu registro. Ingresa al siguiente enlace y utiliza el siguiente código para verificar tu cuenta:</p>          
+          <p>Por favor, ingresa al siguiente enlace: <b><a href="${process.env.FRONTEND_URL + 'user=' + email + '/token=' + token}" target="_blank">${process.env.FRONTEND_URL + 'user=' + email + '/token=' + token}</a></b> y utiliza el siguiente código para verificar tu cuenta: </p>
           <div class="code-container">
             <span class="verification-code">${code}</span>
           </div>
-          <p>Por favor, ingresa este código ingresando a ${process.env.FRONTEND_URL + 'user=' + email + '/token=' + token
-                }</p>
           <div class="footer">
             <p>Este código expirará en ${timeExpiration} minutos.</p>
+            <p>Si generas un nuevo código, el enlace anterior caducará y tendrás que ingresar al nuevo enlace e ingresar el nuevo código.</p>
             <p>Si no solicitaste este código, puedes ignorar este mensaje.</p>
           </div>
         </div>
       </body>
       </html>`;
 
-            await this.zohoMailService.sendMail({
-                to: email,
-                subject: 'Tu código de verificación',
-                html: htmlTemplate,
-            });
-        } catch (error) {
-            console.error('❌ Error enviando correo de verificación:', error);
-            throw new BadRequestException('No se pudo enviar el correo de verificación.');
-        }
+      await this.zohoMailService.sendMail({
+        to: email,
+        subject: 'Tu código de verificación',
+        html: htmlTemplate,
+      });
+    } catch (error) {
+      console.error('❌ Error enviando correo de verificación:', error);
+      throw new BadRequestException('No se pudo enviar el correo de verificación.');
     }
+  }
 }
