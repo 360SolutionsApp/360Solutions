@@ -15,6 +15,9 @@ import { CheckInCheckOutModule } from './check-in-check-out/check-in-check-out.m
 import { ZohoMailModule } from './mailer/zoho-mailer.module';
 import { MailerController } from './mailer/zoho-mailer.controller';
 import { WorkOrderAcceptModule } from './work-order-accept/work-order-accept.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { SurchargeModule } from './surcharge/surcharge.module';
+import { BreakPointsModule } from './break-points/break-points.module';
 
 @Module({
   imports: [
@@ -30,6 +33,9 @@ import { WorkOrderAcceptModule } from './work-order-accept/work-order-accept.mod
     CheckInCheckOutModule,
     ZohoMailModule,
     WorkOrderAcceptModule,
+    InvoicesModule,
+    SurchargeModule,
+    BreakPointsModule,
   ],
   controllers: [AppController, MailerController],
   providers: [AppService],

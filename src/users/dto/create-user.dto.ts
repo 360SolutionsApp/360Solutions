@@ -79,5 +79,5 @@ export class CreateUserDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => AssignmentCostDto)
-  userCostPerAssignment?: AssignmentCostDto[];
+  userCostPerAssignment?: AssignmentCostDto[];  
 }

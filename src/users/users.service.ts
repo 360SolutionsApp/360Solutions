@@ -198,18 +198,57 @@ export class UsersService {
   }
 
   async findAll(params: PaginationDto, getUserId: number, roleId: number) {
+    const {
+      page: rawPage,
+      limit: rawLimit,
+      search,
+      sortField = 'createdAt',
+      orderBy = 'desc',
+    } = params;
+
     console.log('Role ID del usuario autenticado:', roleId);
 
-    // 🔹 Definir condición de rol
-    const whereCondition =
-      roleId === 1 || roleId === 2
-        ? { roleId: 5 } // Super Admin y Admin → ven todos
-        : { roleId: 5 }; // Otros → solo colaboradores
+    // 🔹 Convertir page y limit a número si existen
+    const page = rawPage ? Number(rawPage) : undefined;
+    const limit = rawLimit ? Number(rawLimit) : undefined;
 
-    // 🔹 Calcular paginación
-    const page = params.page ? Number(params.page) : 1;
-    const limit = params.limit ? Number(params.limit) : 10;
-    const skip = (page - 1) * limit;
+    // 🔹 Condición base por rol
+    const baseCondition =
+      roleId === 1 || roleId === 2
+        ? { roleId: 5 } // Super Admin y Admin → ven todos los colaboradores
+        : { roleId: 5 };
+
+    // 🔹 Inicializamos condiciones del where
+    const whereCondition: any = { AND: [baseCondition] };
+
+    // 🔹 Si hay texto de búsqueda, agregamos OR dinámicamente
+    if (search && search.trim() !== '') {
+      const normalizedSearch = search.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const terms = normalizedSearch.split(' ').filter((t) => t.trim() !== '');
+
+      whereCondition.AND.push({
+        OR: terms.flatMap((term) => [
+          { userDetail: { names: { contains: term, mode: 'insensitive' } } },
+          { userDetail: { lastNames: { contains: term, mode: 'insensitive' } } },
+          { userDetail: { documentNumber: { contains: term, mode: 'insensitive' } } },
+          { userDetail: { phone: { contains: term, mode: 'insensitive' } } },
+          { email: { contains: term, mode: 'insensitive' } },
+        ]),
+      });
+    }
+
+    // 🔹 Paginación (solo si se envían los params)
+    const skip = page && limit ? (page - 1) * limit : undefined;
+    const take = limit ?? undefined;
+
+    // 🔹 Ordenamiento dinámico
+    const orderByCondition: any = {};
+    if (sortField.startsWith('userDetail.')) {
+      const [relation, field] = sortField.split('.');
+      orderByCondition[relation] = { [field]: orderBy };
+    } else {
+      orderByCondition[sortField] = orderBy;
+    }
 
     // 🔹 Total de registros
     const total = await this.prismaService.user.count({
@@ -219,44 +258,42 @@ export class UsersService {
     // 🔹 Obtener registros
     const data = await this.prismaService.user.findMany({
       where: whereCondition,
-      skip,
-      take: limit, // ✅ ahora es un número
+      ...(skip !== undefined && { skip }),
+      ...(take !== undefined && { take }),
       include: {
         role: true,
         userDetail: {
           include: {
             documentType: true,
             userCostPerAssignment: {
-              include: {
-                assignment: true,  // para obtener el título/nombre de la asignación
-              },
+              include: { assignment: true },
             },
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: orderByCondition,
     });
 
-    // 🔒 Excluir password
-    const safeData = data.map(({ password, ...user }: any) => {
-      return {
+    // 🔒 Excluir password y usuario autenticado
+    const safeData = data
+      .filter((user: any) => user.id !== getUserId)
+      .map(({ password, ...user }: any) => ({
         ...user,
-        // Mapear asignaciones con su costo por hora
-        assignments: user.userDetail.userCostPerAssignment.map((ucpa) => ({
-          assignmentId: ucpa.assignment.id,
-          assignmentTitle: ucpa.assignment.title,
-          costPerHour: ucpa.costPerHour,
-        })),
-      };
-    });
+        assignments:
+          user.userDetail.userCostPerAssignment?.map((ucpa) => ({
+            assignmentId: ucpa.assignment.id,
+            assignmentTitle: ucpa.assignment.title,
+            costPerHour: ucpa.costPerHour,
+          })) || [],
+      }));
 
-    // excluir el usuario autenticado
-    const filteredData = safeData.filter((user: any) => user.id !== getUserId);
+    // 🔹 Si no hay paginación, no devolvemos meta
+    if (!page || !limit) {
+      return { data: safeData };
+    }
 
     return {
-      data: filteredData,
+      data: safeData,
       meta: {
         total,
         page,
@@ -423,7 +460,7 @@ export class UsersService {
       },
     });
   }
- 
+
 
   async update(email: string, updateUserDto: UpdateUserDto) {
     const user = await this.prismaService.user.findUnique({ where: { email } });

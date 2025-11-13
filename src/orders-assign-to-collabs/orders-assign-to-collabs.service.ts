@@ -306,13 +306,11 @@ export class OrdersAssignToCollabsService {
     return unassignedUsers;
   }
 
-  async findAll(params: PaginationDto, user) {
-    const { page, limit } = params;
+  async findAll(params: PaginationDto, user: any) {
+    const { page, limit, search, filters, sortField = 'createdAt', orderBy = 'desc' } = params;
 
     // ✅ Verificar usuario autenticado
-    const getUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-    });
+    const getUser = await this.prisma.user.findUnique({ where: { id: user.id } });
     if (!getUser) throw new BadRequestException('User not found');
 
     // ✅ Configuración de paginación
@@ -321,10 +319,9 @@ export class OrdersAssignToCollabsService {
     const limitNumber = Number(limit) || 10;
     const skip = (pageNumber - 1) * limitNumber;
 
-    // ✅ Filtro base
+    // 🔹 Filtro base según rol
     let whereCondition: any = {};
     if (getUser.roleId === 5) {
-      // Si es colaborador (roleId = 5)
       whereCondition = {
         worksAssigned: {
           some: {
@@ -335,36 +332,87 @@ export class OrdersAssignToCollabsService {
       };
     }
 
-    // ✅ Total
-    const total = await this.prisma.orderAssignToCollabs.count({
-      where: whereCondition,
-    });
+    // 🔹 Filtro por search (PO, colaborador, cliente)
+    if (search && search.trim() !== '') {
+      whereCondition.AND = whereCondition.AND || [];
+      whereCondition.AND.push({
+        OR: [
+          // PO
+          { workOrder: { workOrderCodePo: { contains: search, mode: 'insensitive' } } },
+          // Colaborador
+          {
+            worksAssigned: {
+              some: {
+                collaborator: {
+                  userDetail: {
+                    OR: [
+                      { names: { contains: search, mode: 'insensitive' } },
+                      { lastNames: { contains: search, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          // Cliente
+          {
+            workOrder: {
+              clientCompany: {
+                is: {
+                  companyName: { contains: search, mode: 'insensitive' },
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
 
-    // ✅ Consulta principal
+    // 🔹 Filtro por estado
+    if (filters?.status && Object.values(workOrderStatus).includes(filters.status as any)) {
+      whereCondition.AND = whereCondition.AND || [];
+      whereCondition.AND.push({ workOrderStatus: filters.status as typeof workOrderStatus });
+    }
+
+    // 🔹 Filtro por hora de inicio
+    if (filters?.hourStart) {
+      whereCondition.AND = whereCondition.AND || [];
+      whereCondition.AND.push({ orderWorkHourStart: filters.hourStart });
+    }
+
+    // 🔹 Filtro por rango de fechas (orderWorkDateStart)
+    if (filters?.startDate || filters?.endDate) {
+      whereCondition.AND = whereCondition.AND || [];
+      whereCondition.AND.push({
+        orderWorkDateStart: {
+          gte: filters.startDate ? new Date(filters.startDate) : undefined,
+          lte: filters.endDate ? new Date(filters.endDate) : undefined,
+        },
+      });
+    }
+
+    // 🔹 Total de registros
+    const total = await this.prisma.orderAssignToCollabs.count({ where: whereCondition });
+
+    // 🔹 Ordenamiento dinámico
+    const orderByCondition: any = {};
+    orderByCondition[sortField] = orderBy;
+
+    // 🔹 Consulta principal
     const data = await this.prisma.orderAssignToCollabs.findMany({
       where: whereCondition,
       skip: shouldPaginate ? skip : undefined,
       take: shouldPaginate ? limitNumber : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: orderByCondition,
       include: {
         workOrder: {
           include: {
             ContractClient: { include: { client: true } },
             clientCompany: {
-              select: {
-                id: true,
-                companyName: true,
-                employerPhone: true,
-                clientAddress: true,
-                employerEmail: true,
-              },
+              select: { id: true, companyName: true, employerPhone: true, clientAddress: true, employerEmail: true },
             },
             supervisorUser: {
-              select: {
-                id: true,
-                email: true,
-                userDetail: { select: { names: true, lastNames: true } },
-              },
+              select: { id: true, email: true, userDetail: { select: { names: true, lastNames: true } } },
             },
           },
         },
@@ -379,11 +427,7 @@ export class OrdersAssignToCollabsService {
                   select: {
                     names: true,
                     lastNames: true,
-                    userCostPerAssignment: {
-                      include: {
-                        assignment: { select: { title: true } },
-                      },
-                    },
+                    userCostPerAssignment: { include: { assignment: { select: { title: true } } } },
                   },
                 },
               },
@@ -394,31 +438,20 @@ export class OrdersAssignToCollabsService {
       },
     });
 
-    // ✅ Agrupar colaboradores duplicados
+    // 🔹 Agrupar colaboradores duplicados por orden
     const groupedData = data.map(order => {
       const collaboratorMap = new Map();
-
       order.worksAssigned.forEach(work => {
         const collabId = work.collaborator.id;
-
         if (!collaboratorMap.has(collabId)) {
-          collaboratorMap.set(collabId, {
-            collaborator: work.collaborator,
-            assignments: [],
-          });
+          collaboratorMap.set(collabId, { collaborator: work.collaborator, assignments: [] });
         }
-
-        // Añadimos la asignación al colaborador existente
         collaboratorMap.get(collabId).assignments.push(work.assignment);
       });
-
-      return {
-        ...order,
-        worksAssigned: Array.from(collaboratorMap.values()), // agrupados
-      };
+      return { ...order, worksAssigned: Array.from(collaboratorMap.values()) };
     });
 
-    // ✅ Retornar paginado o completo
+    // 🔹 Retornar paginado o completo
     if (!shouldPaginate) return groupedData;
 
     return {
