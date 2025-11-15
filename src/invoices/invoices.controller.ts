@@ -17,7 +17,7 @@ export class InvoicesController {
     return this.invoicesService.getAllInvoices(query);
   }
 
-  @Patch(':id/number')
+  @Patch(':id/invoiceId')
   async updateInvoiceNumber(
     @Param('id', ParseIntPipe) id: number,
     @Body('invoiceNumber') invoiceNumber: string,

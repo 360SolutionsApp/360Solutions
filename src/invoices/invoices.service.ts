@@ -279,23 +279,46 @@ export class InvoicesService {
 
     const filters: any = { isDeleted: false };
 
-    if (params.collaboratorName) {
-      filters.collaboratorName = { contains: params.collaboratorName, mode: 'insensitive' };
-    }
-    if (params.clientName) {
-      filters.clientName = { contains: params.clientName, mode: 'insensitive' };
-    }
-    if (params.invoiceNumber) {
-      filters.invoiceNumber = { contains: params.invoiceNumber, mode: 'insensitive' };
-    }
-    if (params.workOrderCodePo) {
-      filters.workOrderCodePo = { contains: params.workOrderCodePo, mode: 'insensitive' };
+    // 🔍 Filtro unificado SEARCH
+    if (params.search) {
+      const search = params.search;
+
+      filters.OR = [
+        // Invoice.snapshot collaboratorName
+        { collaboratorName: { contains: search, mode: 'insensitive' } },
+
+        // Invoice.snapshot clientName
+        { clientName: { contains: search, mode: 'insensitive' } },
+
+        // Invoice.invoiceNumber
+        { invoiceNumber: { contains: search, mode: 'insensitive' } },
+
+        // Invoice.workOrderCodePo
+        { workOrderCodePo: { contains: search, mode: 'insensitive' } },
+
+        // client.companyName (relación)
+        {
+          client: {
+            companyName: { contains: search, mode: 'insensitive' },
+          },
+        },
+
+        // collaborator lastName (user.userDetail.lastNames)
+        {
+          user: {
+            userDetail: {
+              lastNames: { contains: search, mode: 'insensitive' },
+            },
+          },
+        },
+      ];
     }
 
+    // 🔹 Sorting
     const orderByField = params.sortBy ?? 'createdAt';
     const orderByDirection = params.sortOrder ?? 'desc';
 
-    // 🔹 Si no hay paginación
+    // 🔹 Sin paginación
     if (!page || !limit) {
       const data = await this.prisma.invoice.findMany({
         where: filters,
@@ -314,6 +337,7 @@ export class InvoicesService {
     // 🔹 Con paginación
     const total = await this.prisma.invoice.count({ where: filters });
 
+    // excluir password en la relación userDetail
     const data = await this.prisma.invoice.findMany({
       where: filters,
       skip,
@@ -321,7 +345,10 @@ export class InvoicesService {
       orderBy: { [orderByField]: orderByDirection },
       include: {
         client: true,
-        user: { include: { userDetail: true } },
+        user: { 
+          omit: { password: true },
+          include: { userDetail: true } 
+        },
         invoiceAssignments: {
           include: { surchargeDetails: { include: { surcharge: true } } },
         },
