@@ -7,5 +7,6 @@ import { PrismaService } from 'src/prisma.service';
 @Module({
   controllers: [InvoicesController],
   providers: [InvoicesService, PrismaService],
+  exports: [InvoicesService],
 })
 export class InvoicesModule { }

@@ -4,9 +4,13 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateCheckInCheckOutDto, CheckType } from './dto/create-check-in-check-out.dto';
 import { PrismaService } from 'src/prisma.service';
 import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
+import { InvoicesService } from 'src/invoices/invoices.service';
 @Injectable()
 export class CheckInCheckOutService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly invoiceService: InvoicesService
+  ) { }
 
   async create(dto: CreateCheckInCheckOutDto) {
     const { checkType, orderId, userCollabId, time, status } = dto;
@@ -99,6 +103,28 @@ export class CheckInCheckOutService {
           initialStatus: status,
         },
       });
+
+      // 3. 🔥 INTEGRACIÓN DEL SERVICIO DE FACTURACIÓN
+      try {
+        console.log(`🔄 Generando factura automática para usuario ${userCollabId} en orden ${orderId}`);
+
+        const invoiceResult = await this.invoiceService.createInvoicesForUser(userCollabId, [orderId]);
+
+        console.log(`✅ Factura generada exitosamente:`, {
+          userId: userCollabId,
+          orderId,
+          invoicesCreadas: invoiceResult.invoices.length,
+          mensaje: invoiceResult.message
+        });         
+
+      } catch (error) {
+        console.error(`❌ Error generando factura automática:`, {
+          userId: userCollabId,
+          orderId,
+          error: error.message
+        });
+        
+      }
 
       // Obtener colaboradores únicos asignados a la orden
       const assignedCollabIds = [

@@ -11,8 +11,12 @@ interface InvoiceFilterDto extends PaginationDto {
   clientName?: string;
   invoiceNumber?: string;
   workOrderCodePo?: string;
+  assignmentTitles?: string | string[];
   sortBy?: string; // ejemplo: 'createdAt', 'totalWithSurchargesCompany'
   sortOrder?: 'asc' | 'desc';
+  startDate?: string;    // Fecha inicial (YYYY-MM-DD)
+  endDate?: string;      // Fecha final (YYYY-MM-DD)
+  dateField?: string;    // Campo de fecha a filtrar: 'createdAt' | 'updatedAt' | etc.
 }
 
 @Injectable()
@@ -284,26 +288,15 @@ export class InvoicesService {
       const search = params.search;
 
       filters.OR = [
-        // Invoice.snapshot collaboratorName
         { collaboratorName: { contains: search, mode: 'insensitive' } },
-
-        // Invoice.snapshot clientName
         { clientName: { contains: search, mode: 'insensitive' } },
-
-        // Invoice.invoiceNumber
         { invoiceNumber: { contains: search, mode: 'insensitive' } },
-
-        // Invoice.workOrderCodePo
         { workOrderCodePo: { contains: search, mode: 'insensitive' } },
-
-        // client.companyName (relación)
         {
           client: {
             companyName: { contains: search, mode: 'insensitive' },
           },
         },
-
-        // collaborator lastName (user.userDetail.lastNames)
         {
           user: {
             userDetail: {
@@ -311,7 +304,75 @@ export class InvoicesService {
             },
           },
         },
+        {
+          invoiceAssignments: {
+            some: {
+              OR: [
+                {
+                  assignment: {
+                    title: { contains: search, mode: 'insensitive' },
+                  },
+                },
+                {
+                  assignmentName: { contains: search, mode: 'insensitive' },
+                },
+              ],
+            },
+          },
+        },
       ];
+    }
+
+    // 📋 FILTRO POR MÚLTIPLES ASIGNACIONES - VERSIÓN MEJORADA
+    if (params.assignmentTitles) {
+      // Convertir a array si es string único
+      const assignmentTitlesArray = Array.isArray(params.assignmentTitles)
+        ? params.assignmentTitles
+        : [params.assignmentTitles];
+
+      // Filtrar valores vacíos
+      const cleanTitles = assignmentTitlesArray
+        .filter(title => title && title.trim().length > 0)
+        .map(title => title.trim());
+
+      if (cleanTitles.length > 0) {
+        filters.invoiceAssignments = {
+          some: {
+            OR: cleanTitles.map(title => ({
+              OR: [
+                {
+                  assignment: {
+                    title: { contains: title, mode: 'insensitive' },
+                  },
+                },
+                {
+                  assignmentName: { contains: title, mode: 'insensitive' },
+                },
+              ],
+            }))
+          },
+        };
+      }
+    }
+
+    // 📅 FILTRO POR RANGO DE FECHAS
+    if (params.startDate || params.endDate) {
+      const dateFilter: any = {};
+      const dateField = params.dateField || 'createdAt';
+
+      if (params.startDate) {
+        const startDate = new Date(params.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        dateFilter.gte = startDate;
+      }
+
+      if (params.endDate) {
+        const endDate = new Date(params.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        dateFilter.lte = endDate;
+      }
+
+      filters[dateField] = dateFilter;
     }
 
     // 🔹 Sorting
@@ -337,7 +398,6 @@ export class InvoicesService {
     // 🔹 Con paginación
     const total = await this.prisma.invoice.count({ where: filters });
 
-    // excluir password en la relación userDetail
     const data = await this.prisma.invoice.findMany({
       where: filters,
       skip,
@@ -345,12 +405,21 @@ export class InvoicesService {
       orderBy: { [orderByField]: orderByDirection },
       include: {
         client: true,
-        user: { 
+        user: {
           omit: { password: true },
-          include: { userDetail: true } 
+          include: { userDetail: true }
         },
         invoiceAssignments: {
           include: { surchargeDetails: { include: { surcharge: true } } },
+        },
+        workOrder: {
+          include: {
+            checkIn: {
+              include: {
+                breakPeriods: true
+              }
+            },
+          }
         },
       },
     });

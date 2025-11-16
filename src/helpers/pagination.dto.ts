@@ -58,8 +58,11 @@ export class PaginationDto {
     @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
         message: 'endHour must be in HH:mm format',
     })
-    
+
     @IsOptional()
     endHour?: string;
+
+    @IsOptional()
+    assignmentTitles?: string | string[];
 
 }
