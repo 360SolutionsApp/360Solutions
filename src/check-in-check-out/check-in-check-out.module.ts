@@ -6,9 +6,11 @@ import { CheckInCheckOutAttachmentService } from './checkInCheckOutAttachment.se
 import { PrismaService } from 'src/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { InvoicesService } from 'src/invoices/invoices.service';
+import { InvoiceUpdateService } from 'src/invoices/invoice-update';
+import { InvoiceCalculationService } from 'src/invoices/invoice-calcualtion';
 
 @Module({
   controllers: [CheckInCheckOutController],
-  providers: [ConfigService, CheckInCheckOutService, PrismaService, CheckInCheckOutAttachmentService, InvoicesService],
+  providers: [ConfigService, CheckInCheckOutService, PrismaService, CheckInCheckOutAttachmentService, InvoicesService, InvoiceCalculationService, InvoiceUpdateService],
 })
 export class CheckInCheckOutModule {}

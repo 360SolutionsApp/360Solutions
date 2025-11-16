@@ -5,11 +5,13 @@ import { CreateCheckInCheckOutDto, CheckType } from './dto/create-check-in-check
 import { PrismaService } from 'src/prisma.service';
 import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
 import { InvoicesService } from 'src/invoices/invoices.service';
+import { InvoiceUpdateService } from 'src/invoices/invoice-update';
 @Injectable()
 export class CheckInCheckOutService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly invoiceService: InvoicesService
+    private readonly invoiceService: InvoicesService,
+    private readonly invoiceUpdateService: InvoiceUpdateService
   ) { }
 
   async create(dto: CreateCheckInCheckOutDto) {
@@ -115,7 +117,7 @@ export class CheckInCheckOutService {
           orderId,
           invoicesCreadas: invoiceResult.invoices.length,
           mensaje: invoiceResult.message
-        });         
+        });
 
       } catch (error) {
         console.error(`❌ Error generando factura automática:`, {
@@ -123,7 +125,7 @@ export class CheckInCheckOutService {
           orderId,
           error: error.message
         });
-        
+
       }
 
       // Obtener colaboradores únicos asignados a la orden
@@ -475,6 +477,14 @@ export class CheckInCheckOutService {
         },
       });
 
+      // 🔥 ACTUALIZAR FACTURAS RELACIONADAS
+      try {
+        await this.invoiceUpdateService.updateInvoicesByCheckRecord(id, 'IN');
+      } catch (error) {
+        console.error('Error actualizando facturas después de modificar check-in:', error);
+        // No lanzamos error para no afectar la respuesta principal
+      }
+
       return {
         message: 'Check-in actualizado correctamente.',
         updatedCheckIn,
@@ -503,6 +513,15 @@ export class CheckInCheckOutService {
           order: true,
         },
       });
+
+      // Actualizamos la factura al cambiar la hora del checkout
+      // 🔥 ACTUALIZAR FACTURAS RELACIONADAS
+      try {
+        await this.invoiceUpdateService.updateInvoicesByCheckRecord(id, 'OUT');
+      } catch (error) {
+        console.error('Error actualizando facturas después de modificar check-out:', error);
+        // No lanzamos error para no afectar la respuesta principal
+      }
 
       return {
         message: 'Check-out actualizado correctamente.',
