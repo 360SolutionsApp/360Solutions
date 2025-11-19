@@ -12,5 +12,6 @@ import { InvoiceCalculationService } from 'src/invoices/invoice-calcualtion';
 @Module({
   controllers: [CheckInCheckOutController],
   providers: [ConfigService, CheckInCheckOutService, PrismaService, CheckInCheckOutAttachmentService, InvoicesService, InvoiceCalculationService, InvoiceUpdateService],
+  exports: [CheckInCheckOutService]
 })
 export class CheckInCheckOutModule {}
