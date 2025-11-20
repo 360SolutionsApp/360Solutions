@@ -87,7 +87,7 @@ export class WorkOrdersService {
     }
 
     // 🧩 Preparar datos para el correo
-    const assignments = workOrder.assignmentQuantities.map((q) => ({
+    /*const assignments = workOrder.assignmentQuantities.map((q) => ({
       name: q.assignment.title,
       quantity: q.quantityWorkers,
     }));
@@ -106,7 +106,7 @@ export class WorkOrdersService {
         );
     } else {
       console.log('ℹ️ No hay destinatarios para enviar correo de WorkOrder.');
-    }
+    }*/
 
     return workOrder;
   }
