@@ -143,6 +143,21 @@ export class WorkOrdersService {
           },
         },
       };
+    } else if (roleId === 3) {
+      // Filtramos las ordenes por el id de cliente
+      console.log('usuario que consulta', user);
+
+      // Obtenemos el id del cliente del usuario que consulta
+      const userClient = await this.prisma.clientCompany.findFirst({
+        where: { employerEmail: user.email },
+      });
+      
+      console.log('userClient', userClient);
+
+      whereCondition = { 
+        workOrderStatus: { not: 'DELETE' },
+        clientId: userClient?.id
+      };
     } else {
       whereCondition = { workOrderStatus: { not: 'DELETE' } };
     }
