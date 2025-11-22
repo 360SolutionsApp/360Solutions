@@ -18,6 +18,7 @@ import { WorkOrderAcceptModule } from './work-order-accept/work-order-accept.mod
 import { InvoicesModule } from './invoices/invoices.module';
 import { SurchargeModule } from './surcharge/surcharge.module';
 import { BreakPointsModule } from './break-points/break-points.module';
+import { ObservationsModule } from './observations/observations.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { BreakPointsModule } from './break-points/break-points.module';
     InvoicesModule,
     SurchargeModule,
     BreakPointsModule,
+    ObservationsModule,
   ],
   controllers: [AppController, MailerController],
   providers: [AppService],

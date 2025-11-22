@@ -31,6 +31,8 @@ model User {
   Invoice             Invoice[]
 
   breakPeriods breakPeriod[]
+
+  collabObservations collabObservations[]
 }
 
 model UserDetail {
@@ -137,7 +139,9 @@ model ClientCompany {
 
   ClientPricePerAssignment ClientPricePerAssignment[]
 
-  Invoice Invoice[]
+  Invoice      Invoice[]  
+
+  collabObservations collabObservations[]
 }
 
 model ClientPricePerAssignment {
@@ -315,6 +319,8 @@ model workOrder {
 
   orderAcceptByCollab orderAcceptByCollab[]
   Invoice             Invoice[]
+
+  collabObservations collabObservations[]
 }
 
 model assignmentQuantityForWorkOrder {
@@ -435,6 +441,25 @@ model breakPeriod {
   breakStartTime String?
   breakEndTime   String?
   reason         String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model collabObservations {
+  id Int @id @default(autoincrement())
+
+  userCollabId Int?
+  userCollab   User? @relation(fields: [userCollabId], references: [id])
+
+  orderId Int?
+  workOrder workOrder? @relation(fields: [orderId], references: [id])
+
+  clientId Int?
+  client   ClientCompany? @relation(fields: [clientId], references: [id])
+
+  observation String?
+  rating      Decimal? @default(0)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime? @updatedAt

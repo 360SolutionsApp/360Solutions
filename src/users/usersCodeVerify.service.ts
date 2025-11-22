@@ -23,9 +23,9 @@ export class UsersCodeVerifyService {
 
     // 2️⃣ Generar códigos y fechas
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationCodeExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
     const tokenToResetPassword = uuidv4();
-    const tokenToResetPasswordExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    const tokenToResetPasswordExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
 
     try {
       // 3️⃣ Eliminar cualquier registro previo del mismo usuario
