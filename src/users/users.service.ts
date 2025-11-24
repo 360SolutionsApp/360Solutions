@@ -474,7 +474,7 @@ export class UsersService {
         names: updateUserDto.names,
         lastNames: updateUserDto.lastNames,
         phone: updateUserDto.phone,
-        currentCityId: updateUserDto.currentCityId,
+        currentCityId: updateUserDto.currentCityId || null,
         address: updateUserDto.address,
         documentTypeId: updateUserDto.documentTypeId,
         documentNumber: updateUserDto.documentNumber,

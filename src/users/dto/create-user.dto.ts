@@ -36,15 +36,18 @@ export class CreateUserDto {
   birthDate?: Date;
 
   @IsInt()
-  documentTypeId: number;
+  @IsOptional()
+  documentTypeId?: number;
 
   @IsString()
   @MinLength(5)
-  documentNumber: string;
+  @IsOptional()
+  documentNumber?: string;
 
   @IsString()
   @MinLength(7)
-  phone: string;
+  @IsOptional()
+  phone?: string;
 
   @IsOptional()
   @IsInt()
