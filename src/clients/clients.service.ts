@@ -118,7 +118,15 @@ export class ClientsService {
     }
   }
 
-  async findAll(params: PaginationDto) {
+  async findAll(params: PaginationDto, userEmail: string) {
+
+    // 🔹 Obtener el rol del usuario autenticado
+    const user = await this.prisma.user.findUnique({ where: { email: userEmail } });
+    
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }    
+
     const page = params.page ? Number(params.page) : undefined;
     const limit = params.limit ? Number(params.limit) : undefined;
 

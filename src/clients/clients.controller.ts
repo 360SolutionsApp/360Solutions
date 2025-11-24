@@ -34,8 +34,9 @@ export class ClientsController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@Query() query: PaginationDto) {
-    return this.clientsService.findAll(query);
+  findAll(@Query() query: PaginationDto, @Req() req: any) {
+    const userEmail = req.user.email;
+    return this.clientsService.findAll(query, userEmail);
   }
 
   @UseGuards(JwtAuthGuard)
