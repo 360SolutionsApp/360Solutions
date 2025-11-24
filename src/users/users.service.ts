@@ -308,7 +308,7 @@ export class UsersService {
     // 🔹 Condición de rol
     const whereCondition =
       roleId === 1
-        ? { roleId: { notIn: [1, 5] } } // Super Admin → ve todos excepto roles 1, 5 y 6
+        ? { roleId: { notIn: [5] } } // Super Admin → ve todos excepto roles 1, 5 y 6
         : { roleId: 5 }; // Otros → solo colaboradores
 
     // 🔹 Verificar si hay parámetros de paginación válidos
