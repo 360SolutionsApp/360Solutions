@@ -280,7 +280,7 @@ export class UsersService {
       .map(({ password, ...user }: any) => ({
         ...user,
         assignments:
-          user.userDetail.userCostPerAssignment?.map((ucpa) => ({
+          user.userDetail?.userCostPerAssignment?.map((ucpa) => ({
             assignmentId: ucpa.assignment.id,
             assignmentTitle: ucpa.assignment.title,
             costPerHour: ucpa.costPerHour,
