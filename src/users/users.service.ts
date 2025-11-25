@@ -1,7 +1,7 @@
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-require-imports */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma.service';
@@ -519,53 +519,160 @@ export class UsersService {
   async remove(id: number) {
     const user = await this.prismaService.user.findUnique({
       where: { id },
+      include: {
+        userDetail: true,
+        userVerification: true
+      }
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado.');
     }
 
-    const getDetailUser = await this.prismaService.userDetail.findUnique({
-      where: { userId: id },
-    });
-
-    if (!getDetailUser) {
-      throw new NotFoundException('Detalle de usuario no encontrado.');
-    }
-
     try {
-      // Eliminar archivos de S3 si existen
-      const urlsAttachments = [
-        getDetailUser.profilePictureUrl,
-        getDetailUser.attachedDocumentUrl,
-        getDetailUser.socialSecurityUrl,
-        getDetailUser.applicationCvUrl,
-      ].filter((url) => url != null);
+      // 1. Eliminar archivos de S3 si existen
+      if (user.userDetail) {
+        const urlsAttachments = [
+          user.userDetail.profilePictureUrl,
+          user.userDetail.attachedDocumentUrl,
+          user.userDetail.socialSecurityUrl,
+          user.userDetail.applicationCvUrl,
+        ].filter((url) => url != null);
 
-      if (urlsAttachments.length > 0) {
-        await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
+        if (urlsAttachments.length > 0) {
+          await this.usersAttachmentService.deleteFilesFromS3(urlsAttachments);
+        }
       }
 
-      // Eliminar el detalle del usuario
-      await this.prismaService.userDetail.delete({
-        where: { userId: id },
-      });
+      // 2. Usar una transacción para asegurar consistencia
+      await this.prismaService.$transaction(async (tx) => {
+        // Eliminar relaciones en orden inverso a las dependencias
 
-      // Borrar relaciones en userCostPerAssignment
-      await this.prismaService.userCostPerAssignment.deleteMany({
-        where: { userDetailId: getDetailUser.id },
-      });
+        // Primero: Eliminar relaciones de breakPeriod
+        await tx.breakPeriod.deleteMany({
+          where: { userCollabId: id }
+        });
 
-      // Finalmente eliminar el usuario
-      await this.prismaService.user.delete({
-        where: { id },
+        // Eliminar relaciones de checkIn y checkOut
+        await tx.checkIn.deleteMany({
+          where: { userCollabId: id }
+        });
+
+        await tx.checkOut.deleteMany({
+          where: { userCollabId: id }
+        });
+
+        // Eliminar relaciones de workersAssignToOrder
+        await tx.workersAssignToOrder.deleteMany({
+          where: { collaboratorId: id }
+        });
+
+        // Eliminar relaciones de orderAcceptByCollab
+        await tx.orderAcceptByCollab.deleteMany({
+          where: { collaboratorId: id }
+        });
+
+        // Eliminar relaciones de collabObservations
+        await tx.collabObservations.deleteMany({
+          where: { userCollabId: id }
+        });
+
+        // Eliminar userCostPerAssignment (a través de userDetail)
+        if (user.userDetail) {
+          await tx.userCostPerAssignment.deleteMany({
+            where: { userDetailId: user.userDetail.id }
+          });
+        }
+
+        // CORRECCIÓN: Para Invoice, no podemos setear userId a null porque es requerido
+        // En su lugar, hacemos soft delete o eliminamos las invoices
+        await tx.invoice.updateMany({
+          where: { userId: id },
+          data: {
+            isDeleted: true,
+            status: 'DELETED'
+          }
+        });
+
+        // Actualizar workOrders donde es supervisor (no podemos eliminar)
+        await tx.workOrder.updateMany({
+          where: { supervisorUserId: id },
+          data: { supervisorUserId: null }
+        });
+
+        // Eliminar UserVerification si existe
+        if (user.userVerification) {
+          await tx.userVerification.delete({
+            where: { userId: id }
+          });
+        }
+
+        // Eliminar UserDetail si existe
+        if (user.userDetail) {
+          await tx.userDetail.delete({
+            where: { userId: id }
+          });
+        }
+
+        // Finalmente eliminar el usuario
+        await tx.user.delete({
+          where: { id }
+        });
       });
 
       return { message: 'Usuario eliminado correctamente.' };
     } catch (error) {
       console.error('Error al eliminar el usuario:', error);
+
+      // Mejor manejo de errores específicos
+      if (error.code === 'P2003') {
+        // Obtener información detallada de la relación conflictiva
+        const conflictInfo = await this.findConflictingRelations(id);
+        throw new BadRequestException(
+          `No se puede eliminar el usuario porque tiene registros asociados: ${conflictInfo}`
+        );
+      }
+
       throw new InternalServerErrorException('Error al eliminar el usuario.');
     }
+  }
 
+  // Método auxiliar para encontrar relaciones conflictivas
+  private async findConflictingRelations(userId: number): Promise<string> {
+    try {
+      // Verificar workersAssignToOrder
+      const workersAssign = await this.prismaService.workersAssignToOrder.findFirst({
+        where: { collaboratorId: userId }
+      });
+      if (workersAssign) return 'tiene asignaciones de trabajo activas';
+
+      // Verificar checkIn
+      const checkIn = await this.prismaService.checkIn.findFirst({
+        where: { userCollabId: userId }
+      });
+      if (checkIn) return 'tiene registros de check-in';
+
+      // Verificar checkOut
+      const checkOut = await this.prismaService.checkOut.findFirst({
+        where: { userCollabId: userId }
+      });
+      if (checkOut) return 'tiene registros de check-out';
+
+      // Verificar invoices
+      const invoice = await this.prismaService.invoice.findFirst({
+        where: { userId: userId, isDeleted: false }
+      });
+      if (invoice) return 'tiene facturas asociadas';
+
+      // Verificar workOrder como supervisor
+      const workOrder = await this.prismaService.workOrder.findFirst({
+        where: { supervisorUserId: userId }
+      });
+      if (workOrder) return 'es supervisor de órdenes de trabajo';
+
+      return 'relaciones desconocidas';
+    } catch (error) {
+      return 'no se pudieron verificar las relaciones';
+    }
   }
 }
