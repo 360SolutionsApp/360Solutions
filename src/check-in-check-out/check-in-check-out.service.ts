@@ -142,16 +142,42 @@ export class CheckInCheckOutService {
 
       console.log(`Total colaboradores: ${totalCollabs}, con check-out: ${checkOutsCount}`);
 
+      // === 🔍 DEBUG CRÍTICO - AGREGAR AQUÍ ===
+      console.log('🔍 DEBUG CHECKOUT - Order:', orderId);
+      console.log('📊 totalCollabs:', totalCollabs);
+      console.log('📊 checkOutsCount:', checkOutsCount);
+      console.log('❓ checkOutsCount === totalCollabs:', checkOutsCount === totalCollabs);
+      console.log('❓ checkOutsCount < totalCollabs:', checkOutsCount < totalCollabs);
+      console.log('📝 assignedCollabIds:', assignedCollabIds);
+
+      // Verificar individualmente cada colaborador
+      for (const collabId of assignedCollabIds) {
+        const hasCheckout = await this.prisma.checkOut.findFirst({
+          where: { orderId, userCollabId: collabId }
+        });
+        console.log(`👤 Collab ${collabId} has checkout:`, !!hasCheckout);
+      }
+      // === FIN DEBUG ===
+
       // Determinar nuevo estado según la cantidad de colaboradores
       let newStatus: workOrderStatus;
 
       if (totalCollabs === 1 && checkOutsCount === 1) {
         newStatus = workOrderStatus.CLOSED;
+        console.log('✅ Setting CLOSED (single worker)');
       } else if (totalCollabs > 1 && checkOutsCount < totalCollabs) {
         newStatus = workOrderStatus.PARTIALLY_CLOSED;
+        console.log('🟡 Setting PARTIALLY_CLOSED');
       } else if (totalCollabs > 1 && checkOutsCount === totalCollabs) {
         newStatus = workOrderStatus.CLOSED;
+        console.log('✅ Setting CLOSED (all workers completed)');
+      } else {
+        console.log('❌ No condition matched!');
+        // Por defecto, mantener estado actual
+        newStatus = workOrderStatus.PARTIALLY_CLOSED;
       }
+
+      console.log('🎯 Final status to set:', newStatus);
 
       await this.prisma.workOrder.update({
         where: { id: orderId },
@@ -166,6 +192,45 @@ export class CheckInCheckOutService {
     }
   }
 
+  // Agrega este método en la clase CheckInCheckOutService
+  async debugOrderStatus(orderId: number) {
+    // Contar asignados únicos
+    const assignedCollabs = await this.prisma.workersAssignToOrder.findMany({
+      where: {
+        orderAssignToCollab: { workOrderId: orderId }
+      },
+      select: { collaboratorId: true }
+    });
+
+    const uniqueAssigned = new Set(assignedCollabs.map(a => a.collaboratorId)).size;
+
+    // Contar checkins únicos
+    const checkins = await this.prisma.checkIn.findMany({
+      where: { orderId },
+      select: { userCollabId: true }
+    });
+    const uniqueCheckins = new Set(checkins.map(c => c.userCollabId)).size;
+
+    // Contar checkouts únicos
+    const checkouts = await this.prisma.checkOut.findMany({
+      where: { orderId },
+      select: { userCollabId: true }
+    });
+    const uniqueCheckouts = new Set(checkouts.map(c => c.userCollabId)).size;
+
+    console.log('=== DEBUG ORDER STATUS ===');
+    console.log('Unique assigned:', uniqueAssigned);
+    console.log('Unique checkins:', uniqueCheckins);
+    console.log('Unique checkouts:', uniqueCheckouts);
+    console.log('All have checkin/checkout:', uniqueCheckins === uniqueCheckouts && uniqueCheckins === uniqueAssigned);
+
+    return {
+      uniqueAssigned,
+      uniqueCheckins,
+      uniqueCheckouts,
+      shouldBeClosed: uniqueCheckins === uniqueCheckouts && uniqueCheckins === uniqueAssigned
+    };
+  }
 
   async findAll() {
     const checkIns = await this.prisma.checkIn.findMany({
