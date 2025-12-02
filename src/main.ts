@@ -11,6 +11,8 @@ async function bootstrap() {
       'https://localhost',
       'http://localhost:3000',
       'http://localhost:4200',
+      'http://192.168.40.3:4200',
+      'http://192.168.40.2:4200',
       'https://ingrubio.com',
       'https://17gqklpf-3000.use.devtunnels.ms',
       'capacitor://localhost',

@@ -139,7 +139,7 @@ model ClientCompany {
 
   ClientPricePerAssignment ClientPricePerAssignment[]
 
-  Invoice      Invoice[]  
+  Invoice Invoice[]
 
   collabObservations collabObservations[]
 }
@@ -152,7 +152,7 @@ model ClientPricePerAssignment {
   assignmentId Int
   assignment   Assignment @relation(fields: [assignmentId], references: [id])
 
-  pricePerHour Int      @default(0)
+  pricePerHour Decimal  @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -452,7 +452,7 @@ model collabObservations {
   userCollabId Int?
   userCollab   User? @relation(fields: [userCollabId], references: [id])
 
-  orderId Int?
+  orderId   Int?
   workOrder workOrder? @relation(fields: [orderId], references: [id])
 
   clientId Int?

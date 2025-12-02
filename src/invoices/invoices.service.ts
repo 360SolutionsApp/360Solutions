@@ -175,7 +175,7 @@ export class InvoicesService {
 
         // price company: ClientPricePerAssignment for this client and assignment
         const clientId = workOrder.clientId!;
-        let pricePerHourCompany = 0;
+        let pricePerHourCompany!: any;
         if (assignmentId) {
           const cprice = await this.prisma.clientPricePerAssignment.findFirst({
             where: { clientId, assignmentId },
@@ -406,7 +406,7 @@ export class InvoicesService {
       include: {
         client: true,
         user: {
-          omit: { password: true },
+          omit: { password: false },
           include: { userDetail: true }
         },
         invoiceAssignments: {

@@ -12,8 +12,11 @@ export class ReportOrderAssignToSupervisorMailerService {
     private readonly zohoMailService: ZohoMailService, // API Zoho
   ) { }
 
-  async sendAssignmentsToSupervisor(
-    supervisorEmail: string, // correo único del supervisor
+  /**
+   * Genera el HTML del correo para supervisor (sin enviarlo)
+   */
+  generateSupervisorEmailHtml(
+    supervisorEmail: string,
     orderCode: string,
     companyName: string,
     dateStartWork: string,
@@ -21,7 +24,7 @@ export class ReportOrderAssignToSupervisorMailerService {
     locationWork: string,
     observations: string,
     collaborators: { name: string; email: string; assignments: string[] }[],
-  ) {
+  ): { subject: string; html: string } {
     const collaboratorsList = collaborators
       .map(
         (c) => `
@@ -39,7 +42,6 @@ export class ReportOrderAssignToSupervisorMailerService {
     `,
       )
       .join('');
-
 
     const htmlTemplate = `
       <!DOCTYPE html>
@@ -91,14 +93,43 @@ export class ReportOrderAssignToSupervisorMailerService {
       </html>
     `;
 
-    const subject = `Asignación de colaboradores - Orden ${orderCode}`;
+    return {
+      subject: `Asignación de colaboradores - Orden ${orderCode}`,
+      html: htmlTemplate
+    };
+  }
+
+  /**
+   * Envía notificación al supervisor (método original)
+   */
+  async sendAssignmentsToSupervisor(
+    supervisorEmail: string,
+    orderCode: string,
+    companyName: string,
+    dateStartWork: string,
+    hourStartWork: string,
+    locationWork: string,
+    observations: string,
+    collaborators: { name: string; email: string; assignments: string[] }[],
+    useZohoApi = true, // <-- Agregar este parámetro opcional
+  ) {
+    const { subject, html } = this.generateSupervisorEmailHtml(
+      supervisorEmail,
+      orderCode,
+      companyName,
+      dateStartWork,
+      hourStartWork,
+      locationWork,
+      observations,
+      collaborators,
+    );
 
     // ✅ Si ZohoMailService está configurado, usarlo
-    if (this.zohoMailService) {
+    if (useZohoApi && this.zohoMailService) {
       await this.zohoMailService.sendMail({
         to: supervisorEmail,
         subject,
-        html: htmlTemplate,
+        html,
       });
     }
     // ✅ Si no, usar el Mailer SMTP
@@ -106,7 +137,7 @@ export class ReportOrderAssignToSupervisorMailerService {
       await this.mailerService.sendMail({
         to: supervisorEmail,
         subject,
-        html: htmlTemplate,
+        html,
       });
     } else {
       throw new Error('No hay servicio de correo disponible');

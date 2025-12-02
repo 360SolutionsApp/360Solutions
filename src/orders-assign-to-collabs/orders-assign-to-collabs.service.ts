@@ -9,6 +9,7 @@ import { ReportOrderAssignToSupervisorMailerService } from './report-email-super
 import { WorkOrderStatus as workOrderStatus } from '@prisma/client';
 import { WorkOrderAcceptService } from 'src/work-order-accept/work-order-accept.service';
 import { WorkOrderAcceptGateway } from 'src/work-order-accept/orders.gateway';
+import { SimpleEmailQueueService } from 'src/mailer/simple-email-queue.service';
 
 @Injectable()
 export class OrdersAssignToCollabsService {
@@ -17,7 +18,8 @@ export class OrdersAssignToCollabsService {
     private reportEmailService: ReportOrderAssignToCollabsMailerService,
     private reportOrderAssignToSupervisorMailerService: ReportOrderAssignToSupervisorMailerService,
     private workOrderAcceptService: WorkOrderAcceptService,
-    private workOrderGateway: WorkOrderAcceptGateway
+    private workOrderGateway: WorkOrderAcceptGateway,
+    private readonly emailQueueService: SimpleEmailQueueService
   ) { }
 
   async create(createOrdersAssignToCollabDto: CreateOrdersAssignToCollabDto) {
@@ -185,43 +187,30 @@ export class OrdersAssignToCollabsService {
       );
 
       // 9️⃣ Enviar correo a cada colaborador
-      for (const collab of Object.values(collaboratorsGrouped)) {
-        if (!collab.email) continue;
-        await this.reportEmailService.sendAssignmentsToCollabs(
-          [collab.email],
-          orderCodePo,
-          companyName,
-          supervisorName,
-          startDate.toISOString().split('T')[0],
-          orderWorkHourStart,
-          orderLocationWork,
-          orderObservations,
-          collab.assignments.map((a) => a.title),
-          true,
-        );
-      }
+      await this.enqueueEmailsForCollaborators(
+        collaboratorsGrouped,
+        orderCodePo,
+        companyName,
+        supervisorName,
+        startDate,
+        orderWorkHourStart,
+        orderLocationWork,
+        orderObservations
+      );
 
       console.log('correo a enviar supervisorEmail:', supervisorEmail);
 
       // 🔟 Enviar correo al supervisor solo si supervisorEmail existe
       if (supervisorEmail) {
-        const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
-          (collab) => ({
-            name: collab.name,
-            email: collab.email,
-            assignments: collab.assignments.map((a) => a.title),
-          }),
-        );
-
-        await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
+        await this.enqueueSupervisorEmail(
           supervisorEmail,
           orderCodePo,
           companyName,
-          startDate.toISOString().split('T')[0],
+          startDate,
           orderWorkHourStart,
           orderLocationWork,
           orderObservations,
-          collaboratorsForEmail,
+          collaboratorsGrouped
         );
       }
 
@@ -242,6 +231,8 @@ export class OrdersAssignToCollabsService {
         orderLocationWork: newAssignment.orderLocationWork,
         orderObservations: newAssignment.orderObservations,
         collaborators: collaboratorsGrouped,
+        emailStatus: 'enqueued', // <-- Nuevo campo
+        message: '✅ Asignación creada exitosamente. Los correos se enviarán en segundo plano.'
       };
     } catch (error) {
       console.error('Error creando assignment to collabs:', error);
@@ -249,6 +240,100 @@ export class OrdersAssignToCollabsService {
         error.message ||
         'Error al crear la asignación del usuario a la orden de trabajo',
       );
+    }
+  }
+
+  /**
+  * Método para encolar correos de colaboradores
+  */
+  private async enqueueEmailsForCollaborators(
+    collaboratorsGrouped: any[],
+    orderCodePo: string,
+    companyName: string,
+    supervisorName: string,
+    startDate: Date,
+    orderWorkHourStart: string,
+    orderLocationWork: string,
+    orderObservations: string
+  ): Promise<void> {
+    for (const collab of Object.values(collaboratorsGrouped)) {
+      if (!collab.email) continue;
+
+      try {
+        // Generar el HTML usando el servicio existente
+        const emailData = this.reportEmailService.generateEmailHtml(
+          [collab.email],
+          orderCodePo,
+          companyName,
+          supervisorName,
+          startDate.toISOString().split('T')[0],
+          orderWorkHourStart,
+          orderLocationWork,
+          orderObservations,
+          collab.assignments.map((a: any) => a.title)
+        );
+
+        // Agregar a la cola (no espera a que se envíe)
+        await this.emailQueueService.addToQueue({
+          to: collab.email,
+          subject: emailData.subject,
+          html: emailData.html,
+        });
+
+        console.log(`📨 Correo encolado para: ${collab.email}`);
+
+      } catch (queueError) {
+        console.error(`❌ Error al encolar correo para ${collab.email}:`, queueError.message);
+      }
+    }
+  }
+
+  /**
+   * Método para encolar correo del supervisor
+   */
+  private async enqueueSupervisorEmail(
+    supervisorEmail: string,
+    orderCodePo: string,
+    companyName: string,
+    startDate: Date,
+    orderWorkHourStart: string,
+    orderLocationWork: string,
+    orderObservations: string,
+    collaboratorsGrouped: any[]
+  ): Promise<void> {
+    try {
+      // Preparar datos de colaboradores para el supervisor
+      const collaboratorsForEmail = Object.values(collaboratorsGrouped).map(
+        (collab) => ({
+          name: collab.name,
+          email: collab.email,
+          assignments: collab.assignments.map((a: any) => a.title),
+        }),
+      );
+
+      // Generar el HTML usando el servicio existente del supervisor
+      const emailData = this.reportOrderAssignToSupervisorMailerService.generateSupervisorEmailHtml(
+        supervisorEmail,
+        orderCodePo,
+        companyName,
+        startDate.toISOString().split('T')[0],
+        orderWorkHourStart,
+        orderLocationWork,
+        orderObservations,
+        collaboratorsForEmail
+      );
+
+      // Agregar a la cola
+      await this.emailQueueService.addToQueue({
+        to: supervisorEmail,
+        subject: emailData.subject,
+        html: emailData.html,
+      });
+
+      console.log(`📨 Correo encolado para supervisor: ${supervisorEmail}`);
+
+    } catch (error) {
+      console.error(`❌ Error al encolar correo para supervisor ${supervisorEmail}:`, error.message);
     }
   }
 
@@ -761,19 +846,22 @@ export class OrdersAssignToCollabsService {
     // 6️⃣ Enviar correo a cada colaborador
     for (const collab of collaboratorsGrouped) {
       if (!collab.email) continue;
-
-      await this.reportEmailService.sendAssignmentsToCollabs(
-        [collab.email],
-        orderCodePo,
-        companyName,
-        supervisorName, // puede ser 'N/A'
-        startDate.toISOString().split('T')[0],
-        rest.orderWorkHourStart ?? '',
-        rest.orderLocationWork ?? '',
-        rest.orderObservations ?? '',
-        collab.assignments.map((a) => a.title),
-        true,
-      );
+      try {
+        await this.reportEmailService.sendAssignmentsToCollabs(
+          [collab.email],
+          orderCodePo,
+          companyName,
+          supervisorName, // puede ser 'N/A'
+          startDate.toISOString().split('T')[0],
+          rest.orderWorkHourStart ?? '',
+          rest.orderLocationWork ?? '',
+          rest.orderObservations ?? '',
+          collab.assignments.map((a) => a.title),
+          true,
+        );
+      } catch (error) {
+        console.error(`❌ Error enviando correo a colaborador ${collab.email} (ID: ${collab.id}):`, error);
+      }
     }
 
     // 7️⃣ Enviar correo al supervisor (solo si existe)
@@ -784,16 +872,20 @@ export class OrdersAssignToCollabsService {
         assignments: collab.assignments.map((a) => a.title),
       }));
 
-      await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
-        supervisor.email,
-        orderCodePo,
-        companyName,
-        startDate.toISOString().split('T')[0],
-        rest.orderWorkHourStart ?? '',
-        rest.orderLocationWork ?? '',
-        rest.orderObservations ?? '',
-        collaboratorsForEmail,
-      );
+      try {
+        await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
+          supervisor.email,
+          orderCodePo,
+          companyName,
+          startDate.toISOString().split('T')[0],
+          rest.orderWorkHourStart ?? '',
+          rest.orderLocationWork ?? '',
+          rest.orderObservations ?? '',
+          collaboratorsForEmail,
+        );
+      } catch (error) {
+        console.error(`❌ Error enviando correo al supervisor ${supervisor.email}:`, error);
+      }
     }
 
     // 8️⃣ Retornar respuesta
@@ -834,6 +926,13 @@ export class OrdersAssignToCollabsService {
     if (workOrder.workOrderStatus === 'PENDING') {
       return this.removeDefinitive(id);
     } else {
+
+      // Si la workOrder no existe o workOrderStatus = 'DELETE', eliminamos definitivamente el registro
+      if (!workOrder || workOrder.workOrderStatus === 'DELETE') {
+        return this.removeDefinitive(id);
+      }
+
+
       // Actualizamos el estado a 'DELETE' (sin eliminar el registro)
       return this.prisma.orderAssignToCollabs.update({
         where: { id },

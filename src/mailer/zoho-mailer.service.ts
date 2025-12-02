@@ -1,11 +1,12 @@
 /* eslint-disable prettier/prettier */
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
 export class ZohoMailService {
+  private readonly logger = new Logger(ZohoMailService.name);
   private accessToken: string | null = null;
 
   constructor(
@@ -17,7 +18,7 @@ export class ZohoMailService {
    * Obtiene un nuevo access token usando el refresh token
    */
   private async refreshAccessToken(): Promise<void> {
-    const url = this.config.get<string>('ZOHO_API_BASE_URL'); // https://accounts.zoho.com/oauth/v2/token
+    const url = this.config.get<string>('ZOHO_API_BASE_URL');
 
     const data = new URLSearchParams({
       grant_type: 'refresh_token',
@@ -34,21 +35,16 @@ export class ZohoMailService {
       );
 
       this.accessToken = response.data.access_token;
-      console.log('🔑 Nuevo access token obtenido');
+      this.logger.log('🔑 Nuevo access token obtenido');
     } catch (error) {
-      console.error(
-        '❌ Error al refrescar token:',
-        error.response?.data || error.message,
-      );
-      throw new HttpException(
-        'No se pudo refrescar el access token',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      this.logger.error('❌ Error al refrescar token:', error.response?.data || error.message);
+      throw error;
     }
   }
 
   /**
    * Envía un correo usando la API de Zoho
+   * NOTA: Este método ahora puede fallar, la cola manejará los reintentos
    */
   async sendMail({
     to,
@@ -68,18 +64,18 @@ export class ZohoMailService {
     const fromAddress = process.env.ZOHO_FROM_ADDRESS;
 
     const url = `https://mail.zoho.com/api/accounts/${accountId}/messages`;
-
-    // 👇 Convertimos siempre a una lista separada por comas (Zoho acepta esto)
     const toAddress = Array.isArray(to) ? to.join(',') : to;
 
     const payload = {
       fromAddress,
       toAddress,
       subject,
-      content: html, // puede ser HTML o texto
+      content: html,
       askReceipt: 'yes',
       mailFormat: 'html',
     };
+
+    this.logger.log(`📤 Enviando correo a: ${toAddress}`);
 
     try {
       const response = await firstValueFrom(
@@ -91,25 +87,27 @@ export class ZohoMailService {
         }),
       );
 
+      this.logger.log(`✅ Correo enviado exitosamente a: ${toAddress}`);
       return response.data;
+
     } catch (error) {
       const zohoError = error.response?.data;
-
-      // Manejar token inválido o expirado correctamente
+      
+      // Manejar token inválido o expirado
       if (
         zohoError?.data?.[0]?.errorCode === 'INVALID_OAUTHTOKEN' ||
         zohoError?.status?.code === 401
       ) {
-        console.log('🔄 Token expirado o inválido, refrescando...');
+        this.logger.log('🔄 Token expirado o inválido, refrescando...');
+        this.accessToken = null;
         await this.refreshAccessToken();
-        return this.sendMail({ to, subject, html });
+        // Lanzar error para que la cola reintente
+        throw error;
       }
 
-      console.error('❌ Error al enviar correo:', zohoError || error.message);
-      throw new HttpException(
-        'No se pudo enviar el correo',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      // Solo loguear otros errores y lanzar para que la cola los maneje
+      this.logger.error(`❌ Error al enviar correo:`, zohoError?.status?.description || error.message);
+      throw error;
     }
   }
 }

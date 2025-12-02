@@ -12,10 +12,10 @@ export class ReportOrderAssignToCollabsMailerService {
   ) {}
 
   /**
-   * Envía notificación a los colaboradores sobre su asignación a una orden
+   * Genera el HTML del correo (sin enviarlo)
    */
-  async sendAssignmentsToCollabs(
-    emails: string[],          // ← lista de destinatarios
+  generateEmailHtml(
+    emails: string[],
     orderCode: string,
     companyName: string,
     supervisor: string,
@@ -23,9 +23,8 @@ export class ReportOrderAssignToCollabsMailerService {
     hourStartWork: string,
     locationWork: string,
     observations: string,
-    assignments: string[],     // ← nuevo parámetro para tareas
-    useZohoApi = false,
-  ) {
+    assignments: string[],
+  ): { subject: string; html: string } {
     // Generar bloque de HTML con las asignaciones
     const assignmentsHtml =
       assignments?.length > 0
@@ -83,19 +82,50 @@ export class ReportOrderAssignToCollabsMailerService {
       </html>
     `;
 
-    const subject = `Nueva orden de trabajo - ${orderCode}`;
+    return {
+      subject: `Nueva orden de trabajo - ${orderCode}`,
+      html: htmlTemplate
+    };
+  }
+
+  /**
+   * Envía notificación a los colaboradores (método original)
+   */
+  async sendAssignmentsToCollabs(
+    emails: string[],
+    orderCode: string,
+    companyName: string,
+    supervisor: string,
+    dateStartWork: string,
+    hourStartWork: string,
+    locationWork: string,
+    observations: string,
+    assignments: string[],
+    useZohoApi = false,
+  ) {
+    const { subject, html } = this.generateEmailHtml(
+      emails,
+      orderCode,
+      companyName,
+      supervisor,
+      dateStartWork,
+      hourStartWork,
+      locationWork,
+      observations,
+      assignments,
+    );
 
     if (useZohoApi) {
       await this.zohoMailService.sendMail({
         to: emails,
         subject,
-        html: htmlTemplate,
+        html,
       });
     } else {
       await this.mailerService.sendMail({
         to: emails,
         subject,
-        html: htmlTemplate,
+        html,
       });
     }
   }
