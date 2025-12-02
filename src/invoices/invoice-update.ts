@@ -281,7 +281,7 @@ export class InvoiceUpdateService {
 
                 // Recalcular precios (similar a createInvoicesForUser)
                 let pricePerHourCollaborator = assignment.pricePerHourCollaborator;
-                let pricePerHourCompany = assignment.pricePerHourCompany;
+                let pricePerHourCompany: any = assignment.pricePerHourCompany;
 
                 // Si tenemos assignmentId, podemos recalcular los precios actualizados
                 if (assignmentId) {
