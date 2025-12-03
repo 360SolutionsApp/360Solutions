@@ -99,27 +99,31 @@ export class UsersService {
   }
 
 
-  async validatePassword(password: string) {
+  async validatePassword(password: string): Promise<void> {
+    await Promise.resolve(); // 🔥 forzar async boundary
+
     const passwordLength = password.length;
     if (passwordLength < 8) {
-      throw new NotFoundException(
+      throw new BadRequestException(
         'La contraseña debe tener al menos 8 caracteres.',
       );
     }
 
     const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[-!@#$%^&*()_+[\]{};':"\\|,.<>/?`~])[A-Za-z\d\-!@#$%^&*()_+\[\]{};':"\\|,.<>\/?`~]{8,}$/;
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
     if (!passwordRegex.test(password)) {
-      throw new NotFoundException(
+      throw new BadRequestException(
         'La contraseña debe contener al menos una letra mayúscula, una letra minúscula, un número y un carácter especial.',
       );
     }
   }
 
+
   async assignedPassword(email: string, password: string) {
-    this.validatePassword(password);
 
     try {
+      await this.validatePassword(password);
       // Usamos el método `genSalt` y `hash` de forma asíncrona.
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
