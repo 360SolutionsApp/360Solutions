@@ -26,7 +26,7 @@ export class UsersService {
     if (verifyEmail) throw new ConflictException('El correo ya está registrado');
 
     // ✅ 2. Verificar que el documento no exista
-    if (createUserDto.documentNumber) {
+    if (createUserDto.documentNumber && createUserDto.documentNumber.trim() !== '') {
       const verifyDoc = await this.prismaService.userDetail.findUnique({
         where: { documentNumber: createUserDto.documentNumber },
       });
@@ -476,8 +476,8 @@ export class UsersService {
         phone: updateUserDto.phone,
         currentCityId: updateUserDto.currentCityId || null,
         address: updateUserDto.address,
-        documentTypeId: updateUserDto.documentTypeId,
-        documentNumber: updateUserDto.documentNumber,
+        documentTypeId: updateUserDto.documentTypeId || null,
+        documentNumber: updateUserDto.documentNumber || null,
         birthDate: updateUserDto.birthDate,
       },
     });
