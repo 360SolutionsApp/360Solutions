@@ -3,12 +3,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { InvoiceCalculationService } from './invoice-calcualtion';
+import { InvoicesService } from './invoices.service';
 
 @Injectable()
 export class InvoiceUpdateService {
     constructor(
         private prisma: PrismaService,
         private invoiceCalculation: InvoiceCalculationService,
+        private invoiceService: InvoicesService,
     ) { }
 
     /**
@@ -115,14 +117,18 @@ export class InvoiceUpdateService {
                 },
             });
 
+            // Si NO hay facturas → CREAR y salir
             if (invoices.length === 0) {
-                console.log(`ℹ️ No hay facturas activas para actualizar para usuario ${userId}, orden ${orderId}`);
-                return;
+                console.log(`ℹ️ No hay facturas activas para usuario ${userId}, orden ${orderId}. Creando nueva...`);
+
+                const created = await this.invoiceService.createInvoicesForUser(userId, [orderId]);
+
+                console.log(`📄 Factura creada correctamente:`, created);
+                return; // se detiene aquí, no intenta recalcular nada
             }
 
+            // Si hay facturas → recalcularlas
             console.log(`📄 Encontradas ${invoices.length} facturas para actualizar`);
-
-            // Recalcular y actualizar cada factura
             for (const invoice of invoices) {
                 await this.recalculateAndUpdateInvoice(invoice.id, userId, orderId);
             }
