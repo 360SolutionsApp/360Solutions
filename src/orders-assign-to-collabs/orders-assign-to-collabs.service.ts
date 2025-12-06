@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateOrdersAssignToCollabDto } from './dto/create-orders-assign-to-collab.dto';
 import { UpdateOrdersAssignToCollabDto } from './dto/update-orders-assign-to-collab.dto';
@@ -634,6 +635,11 @@ export class OrdersAssignToCollabsService {
       where: { id },
       include: {
         workOrder: true,
+        worksAssigned: {
+          include: {
+            collaborator: true,
+          },
+        },
       },
     });
 
@@ -641,24 +647,39 @@ export class OrdersAssignToCollabsService {
       throw new BadRequestException('No se encontró la asignación especificada.');
     }
 
-    // 2️⃣ Eliminar todas las asignaciones actuales
-    await this.prisma.workersAssignToOrder.deleteMany({
-      where: { orderAssignToCollabId: id },
-    });
+    // 2️⃣ Obtener colaboradores existentes y nuevos
+    const existingCollaboratorIds = existingAssignment.worksAssigned.map(
+      (assignment) => assignment.collaboratorId,
+    );
 
-    // 3️⃣ Actualizar información general y crear nuevas asignaciones
+    const incomingCollaboratorIds = collaboratorsList.map(
+      (c) => c.collaboratorId,
+    );
+
+    // 3️⃣ Identificar cambios
+    const collaboratorsToAdd = collaboratorsList.filter(
+      (c) => !existingCollaboratorIds.includes(c.collaboratorId),
+    );
+
+    const collaboratorsToRemove = existingCollaboratorIds.filter(
+      (collabId) => !incomingCollaboratorIds.includes(collabId),
+    );
+
+    // 4️⃣ Eliminar solo los colaboradores removidos
+    if (collaboratorsToRemove.length > 0) {
+      await this.prisma.workersAssignToOrder.deleteMany({
+        where: {
+          orderAssignToCollabId: id,
+          collaboratorId: { in: collaboratorsToRemove },
+        },
+      });
+    }
+
+    // 5️⃣ Actualizar información general
     const updatedAssignment = await this.prisma.orderAssignToCollabs.update({
       where: { id },
       data: {
         ...rest,
-        worksAssigned: {
-          create: collaboratorsList.flatMap((c) =>
-            (c.assigmentsId ?? []).map((assignmentId) => ({
-              collaboratorId: c.collaboratorId,
-              assignmentId,
-            })),
-          ),
-        },
       },
       include: {
         worksAssigned: {
@@ -694,101 +715,159 @@ export class OrdersAssignToCollabsService {
       },
     });
 
-    for (const collab of collaboratorsList) {
-      const existingAccept = await this.prisma.orderAcceptByCollab.findFirst({
-        where: {
-          collaboratorId: collab.collaboratorId,
-          workOrderId: updatedAssignment.workOrder.id,
-        },
-      });
-
-      let result;
-
-      if (existingAccept) {
-        result = await this.prisma.orderAcceptByCollab.update({
-          where: { id: existingAccept.id },
-          data: { acceptWorkOrder: false },
-        });
-      } else {
-        result = await this.prisma.orderAcceptByCollab.create({
-          data: {
-            collaboratorId: collab.collaboratorId,
-            workOrderId: updatedAssignment.workOrder.id,
-            acceptWorkOrder: false,
-          },
+    // 6️⃣ Agregar nuevas asignaciones solo para colaboradores nuevos
+    if (collaboratorsToAdd.length > 0) {
+      for (const newCollaborator of collaboratorsToAdd) {
+        await this.prisma.workersAssignToOrder.createMany({
+          data: (newCollaborator.assigmentsId ?? []).map((assignmentId) => ({
+            orderAssignToCollabId: id,
+            collaboratorId: newCollaborator.collaboratorId,
+            assignmentId,
+          })),
+          skipDuplicates: true,
         });
       }
 
-      // ✅ Obtener datos desde orderAssignToCollabs
-      const enriched = await this.prisma.orderAssignToCollabs.findFirst({
-        where: {
-          workOrderId: updatedAssignment.workOrder.id,
-          worksAssigned: {
-            some: { collaboratorId: collab.collaboratorId },
+      // 7️⃣ Actualizar/Crear orderAcceptByCollab solo para nuevos colaboradores
+      for (const newCollaborator of collaboratorsToAdd) {
+        const existingAccept = await this.prisma.orderAcceptByCollab.findFirst({
+          where: {
+            collaboratorId: newCollaborator.collaboratorId,
+            workOrderId: existingAssignment.workOrderId,
           },
-        },
-        select: {
-          id: true,
-          orderWorkDateStart: true,
-          orderWorkHourStart: true,
-          orderLocationWork: true,
-          workOrderStatus: true,
-          worksAssigned: {
-            where: { collaboratorId: collab.collaboratorId },
-            select: {
-              assignment: { select: { title: true } },
-            },
-          },
-          workOrder: {
-            select: {
-              workOrderCodePo: true,
-              clientCompany: { select: { companyName: true } },
-            },
-          },
-        },
-      });
+        });
 
-      if (enriched) {
-        const payload = {
-          id: result.id,
-          orderAssignId: enriched.id,
-          workOrderCodePo: enriched.workOrder?.workOrderCodePo ?? 'N/A',
-          workOrderStatus: enriched.workOrderStatus,
-          companyName: enriched.workOrder?.clientCompany?.companyName ?? 'N/A',
-          workLocation: enriched.orderLocationWork,
-          workStartDate: enriched.orderWorkDateStart,
-          workStartHour: enriched.orderWorkHourStart,
-          assignments: enriched.worksAssigned.map((w) => w.assignment?.title ?? ''),
-        };
+        let result;
 
-        try {
-          this.workOrderGateway?.notifyPendingOrders(collab.collaboratorId, payload);
-        } catch (error) {
-          console.warn('⚠️ No se pudo emitir evento WebSocket:', error.message);
+        if (existingAccept) {
+          result = await this.prisma.orderAcceptByCollab.update({
+            where: { id: existingAccept.id },
+            data: { acceptWorkOrder: false },
+          });
+        } else {
+          result = await this.prisma.orderAcceptByCollab.create({
+            data: {
+              collaboratorId: newCollaborator.collaboratorId,
+              workOrderId: existingAssignment.workOrderId,
+              acceptWorkOrder: false,
+            },
+          });
         }
 
-        try {
-          this.workOrderGateway.notifyOrdersUpdate();
-          this.workOrderGateway.notifyOrdersUpdate();
-          this.workOrderGateway.notifyNotConfirmedOrders('');
-        } catch (error) {
-          console.warn('⚠️ No se pudo emitir actualización global:', error.message);
+        // ✅ Obtener datos enriquecidos para notificación
+        const enriched = await this.prisma.orderAssignToCollabs.findFirst({
+          where: {
+            id: id,
+            worksAssigned: {
+              some: { collaboratorId: newCollaborator.collaboratorId },
+            },
+          },
+          select: {
+            id: true,
+            orderWorkDateStart: true,
+            orderWorkHourStart: true,
+            orderLocationWork: true,
+            workOrderStatus: true,
+            worksAssigned: {
+              where: { collaboratorId: newCollaborator.collaboratorId },
+              select: {
+                assignment: { select: { title: true } },
+              },
+            },
+            workOrder: {
+              select: {
+                workOrderCodePo: true,
+                clientCompany: { select: { companyName: true } },
+              },
+            },
+          },
+        });
+
+        if (enriched) {
+          const payload = {
+            id: result.id,
+            orderAssignId: enriched.id,
+            workOrderCodePo: enriched.workOrder?.workOrderCodePo ?? 'N/A',
+            workOrderStatus: enriched.workOrderStatus,
+            companyName: enriched.workOrder?.clientCompany?.companyName ?? 'N/A',
+            workLocation: enriched.orderLocationWork,
+            workStartDate: enriched.orderWorkDateStart,
+            workStartHour: enriched.orderWorkHourStart,
+            assignments: enriched.worksAssigned.map((w) => w.assignment?.title ?? ''),
+          };
+
+          try {
+            this.workOrderGateway?.notifyPendingOrders(
+              newCollaborator.collaboratorId,
+              payload,
+            );
+          } catch (error) {
+            console.warn('⚠️ No se pudo emitir evento WebSocket:', error.message);
+          }
         }
+      }
+
+      // 8️⃣ Notificaciones globales
+      try {
+        this.workOrderGateway?.notifyOrdersUpdate();
+        this.workOrderGateway?.notifyNotConfirmedOrders('');
+      } catch (error) {
+        console.warn('⚠️ No se pudo emitir actualización global:', error.message);
       }
     }
 
-    // 4️⃣ Datos del cliente y supervisor
-    const order = updatedAssignment.workOrder;
-    const company =
-      order.clientId &&
-      (await this.prisma.clientCompany.findUnique({
-        where: { id: order.clientId },
-      }));
+    // 9️⃣ Cargar datos actualizados completos
+    const finalAssignment = await this.prisma.orderAssignToCollabs.findUnique({
+      where: { id },
+      include: {
+        worksAssigned: {
+          include: {
+            collaborator: {
+              select: {
+                id: true,
+                email: true,
+                userDetail: {
+                  select: {
+                    names: true,
+                    lastNames: true,
+                  },
+                },
+              },
+            },
+            assignment: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+        workOrder: {
+          select: {
+            id: true,
+            workOrderCodePo: true,
+            clientId: true,
+            supervisorUserId: true,
+            clientCompany: {
+              select: {
+                companyName: true,
+              },
+            },
+          },
+        },
+      },
+    });
 
-    const companyName = company?.companyName ?? 'N/A';
+    if (!finalAssignment) {
+      throw new BadRequestException('Error al cargar la asignación actualizada.');
+    }
+
+    // 🔟 Datos para correos
+    const order = finalAssignment.workOrder;
+    const companyName = order.clientCompany?.companyName ?? 'N/A';
     const orderCodePo = order.workOrderCodePo ?? 'N/A';
 
-    // ✅ Supervisor opcional: solo se busca si existe supervisorUserId
+    // Supervisor opcional
     let supervisor: any = null;
     let supervisorName = 'N/A';
     if (order.supervisorUserId) {
@@ -804,17 +883,22 @@ export class OrdersAssignToCollabsService {
       }
     }
 
-    // 5️⃣ Agrupar asignaciones por colaborador
+    // 1️⃣1️⃣ Agrupar asignaciones por colaborador
     type CollaboratorGroup = {
       id: number;
       email: string;
       name: string;
       assignments: { id: number; title: string }[];
+      isNew: boolean;
     };
 
     const collaboratorsGrouped = Object.values(
-      updatedAssignment.worksAssigned.reduce((acc, w) => {
+      finalAssignment.worksAssigned.reduce((acc, w) => {
         const collabId = w.collaborator.id;
+        const isNewCollaborator = collaboratorsToAdd.some(
+          (c) => c.collaboratorId === collabId,
+        );
+
         if (!acc[collabId]) {
           acc[collabId] = {
             id: collabId,
@@ -823,14 +907,15 @@ export class OrdersAssignToCollabsService {
               ? `${w.collaborator.userDetail.names} ${w.collaborator.userDetail.lastNames}`
               : w.collaborator.email,
             assignments: [],
+            isNew: isNewCollaborator,
           };
         }
 
         // Evita títulos duplicados
-        if (!acc[collabId].assignments.some((a) => a.id === w.assignment.id)) {
+        if (!acc[collabId].assignments.some((a) => a.id === w.assignment?.id)) {
           acc[collabId].assignments.push({
-            id: w.assignment.id,
-            title: w.assignment.title,
+            id: w.assignment?.id || 0,
+            title: w.assignment?.title || 'Sin asignación',
           });
         }
 
@@ -841,36 +926,43 @@ export class OrdersAssignToCollabsService {
     const startDate =
       rest.orderWorkDateStart instanceof Date
         ? rest.orderWorkDateStart
-        : new Date(rest.orderWorkDateStart);
+        : rest.orderWorkDateStart
+          ? new Date(rest.orderWorkDateStart)
+          : finalAssignment.orderWorkDateStart || new Date();
 
-    // 6️⃣ Enviar correo a cada colaborador
-    for (const collab of collaboratorsGrouped) {
+    // 1️⃣2️⃣ Enviar correo SOLO a colaboradores nuevos
+    for (const collab of collaboratorsGrouped.filter((c) => c.isNew)) {
       if (!collab.email) continue;
       try {
         await this.reportEmailService.sendAssignmentsToCollabs(
           [collab.email],
           orderCodePo,
           companyName,
-          supervisorName, // puede ser 'N/A'
+          supervisorName,
           startDate.toISOString().split('T')[0],
-          rest.orderWorkHourStart ?? '',
-          rest.orderLocationWork ?? '',
-          rest.orderObservations ?? '',
+          rest.orderWorkHourStart ?? finalAssignment.orderWorkHourStart ?? '',
+          rest.orderLocationWork ?? finalAssignment.orderLocationWork ?? '',
+          rest.orderObservations ?? finalAssignment.orderObservations ?? '',
           collab.assignments.map((a) => a.title),
           true,
         );
       } catch (error) {
-        console.error(`❌ Error enviando correo a colaborador ${collab.email} (ID: ${collab.id}):`, error);
+        console.error(
+          `❌ Error enviando correo a nuevo colaborador ${collab.email} (ID: ${collab.id}):`,
+          error,
+        );
       }
     }
 
-    // 7️⃣ Enviar correo al supervisor (solo si existe)
-    if (supervisor?.email) {
-      const collaboratorsForEmail = collaboratorsGrouped.map((collab) => ({
-        name: collab.name,
-        email: collab.email,
-        assignments: collab.assignments.map((a) => a.title),
-      }));
+    // 1️⃣3️⃣ Enviar correo al supervisor si hubo cambios (opcional)
+    if (supervisor?.email && collaboratorsToAdd.length > 0) {
+      const newCollaboratorsForEmail = collaboratorsGrouped
+        .filter((collab) => collab.isNew)
+        .map((collab) => ({
+          name: collab.name,
+          email: collab.email,
+          assignments: collab.assignments.map((a) => a.title),
+        }));
 
       try {
         await this.reportOrderAssignToSupervisorMailerService.sendAssignmentsToSupervisor(
@@ -878,32 +970,39 @@ export class OrdersAssignToCollabsService {
           orderCodePo,
           companyName,
           startDate.toISOString().split('T')[0],
-          rest.orderWorkHourStart ?? '',
-          rest.orderLocationWork ?? '',
-          rest.orderObservations ?? '',
-          collaboratorsForEmail,
+          rest.orderWorkHourStart ?? finalAssignment.orderWorkHourStart ?? '',
+          rest.orderLocationWork ?? finalAssignment.orderLocationWork ?? '',
+          rest.orderObservations ?? finalAssignment.orderObservations ?? '',
+          newCollaboratorsForEmail,
         );
       } catch (error) {
-        console.error(`❌ Error enviando correo al supervisor ${supervisor.email}:`, error);
+        console.error(
+          `❌ Error enviando correo al supervisor ${supervisor.email}:`,
+          error,
+        );
       }
     }
 
-    // 8️⃣ Retornar respuesta
+    // 1️⃣4️⃣ Retornar respuesta
     return {
-      id: updatedAssignment.id,
-      workOrderId: updatedAssignment.workOrder.id,
+      id: finalAssignment.id,
+      workOrderId: finalAssignment.workOrder.id,
       orderWorkDateStart:
-        typeof updatedAssignment.orderWorkDateStart === 'string'
-          ? updatedAssignment.orderWorkDateStart
-          : updatedAssignment.orderWorkDateStart?.toISOString(),
+        typeof finalAssignment.orderWorkDateStart === 'string'
+          ? finalAssignment.orderWorkDateStart
+          : finalAssignment.orderWorkDateStart?.toISOString(),
       orderWorkDateEnd:
-        typeof updatedAssignment.orderWorkDateEnd === 'string'
-          ? updatedAssignment.orderWorkDateEnd
-          : updatedAssignment.orderWorkDateEnd?.toISOString(),
-      orderWorkHourStart: updatedAssignment.orderWorkHourStart,
-      orderLocationWork: updatedAssignment.orderLocationWork,
-      orderObservations: updatedAssignment.orderObservations,
-      collaborators: collaboratorsGrouped,
+        typeof finalAssignment.orderWorkDateEnd === 'string'
+          ? finalAssignment.orderWorkDateEnd
+          : finalAssignment.orderWorkDateEnd?.toISOString(),
+      orderWorkHourStart: finalAssignment.orderWorkHourStart,
+      orderLocationWork: finalAssignment.orderLocationWork,
+      orderObservations: finalAssignment.orderObservations,
+      collaborators: collaboratorsGrouped.map(({ isNew, ...collab }) => collab),
+      changes: {
+        added: collaboratorsToAdd.length,
+        removed: collaboratorsToRemove.length,
+      },
     };
   }
 

@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { WorkOrderStatus } from 'src/work-orders/dto/create-work-order.dto';
 
 export class CollaboratorAssignmentDto {
     @IsInt()
@@ -29,6 +30,9 @@ export class CreateOrdersAssignToCollabDto {
 
     @IsString()
     orderObservations: string;
+
+    @IsOptional()
+    workOrderStatus?: WorkOrderStatus;
 
     @IsArray()
     @ValidateNested({ each: true })
