@@ -1,6 +1,6 @@
 /* eslint-disable prettier/prettier */
 // src/invoices/dto/create-invoice.dto.ts
-import { IsArray, IsInt, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsOptional, IsString } from 'class-validator';
 
 export class CreateInvoiceDto {
     @IsInt()
@@ -17,4 +17,8 @@ export class CreateInvoiceDto {
     @IsOptional()
     @IsString()
     invoiceNumber?: string; // opcional (si quieres controlarlo externamente)
+
+    @IsOptional()
+    @IsBoolean()
+    isDownload?: boolean;
 }

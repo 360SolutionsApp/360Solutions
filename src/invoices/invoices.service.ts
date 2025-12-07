@@ -443,7 +443,7 @@ export class InvoicesService {
     }
 
     // Verificar si el número ya está siendo usado por otra factura
-    const duplicate = await this.prisma.invoice.findFirst({
+    /*const duplicate = await this.prisma.invoice.findFirst({
       where: {
         invoiceNumber,
         NOT: { id: invoiceId }, // evita conflicto consigo misma
@@ -454,7 +454,7 @@ export class InvoicesService {
       throw new BadRequestException(
         `El número de factura '${invoiceNumber}' ya está asignado a otra factura`
       );
-    }
+    }*/
 
     // Actualizar el número de factura
     const updated = await this.prisma.invoice.update({
@@ -465,6 +465,41 @@ export class InvoicesService {
     return {
       message: 'Número de factura actualizado correctamente',
       invoice: updated,
+    };
+  }
+
+  // Actualizar el estado de la factura isDownload a true (para marcar que se ha descargado)
+  async markInvoicesAsDownloaded(ids: number[]) {
+    // Validar que el array no esté vacío
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Debe proporcionar al menos un ID de factura');
+    }
+
+    // Verificar que todas las facturas existan
+    const invoices = await this.prisma.invoice.findMany({
+      where: { id: { in: ids } }
+    });
+
+    // Verificar si alguna factura no existe
+    const foundIds = invoices.map(invoice => invoice.id);
+    const notFoundIds = ids.filter(id => !foundIds.includes(id));
+
+    if (notFoundIds.length > 0) {
+      throw new NotFoundException(
+        `Las siguientes facturas no existen: ${notFoundIds.join(', ')}`
+      );
+    }
+
+    // Actualizar todas las facturas
+    const updatedInvoices = await this.prisma.invoice.updateMany({
+      where: { id: { in: ids } },
+      data: { isDownload: true },
+    });
+
+    return {
+      message: `${updatedInvoices.count} factura(s) marcada(s) como descargada(s) con éxito`,
+      count: updatedInvoices.count,
+      ids: ids
     };
   }
 

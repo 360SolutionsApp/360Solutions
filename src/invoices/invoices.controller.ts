@@ -25,6 +25,11 @@ export class InvoicesController {
     return this.invoicesService.updateInvoiceNumber(id, invoiceNumber);
   }
 
+  @Patch('mark-downloaded')
+  async markInvoicesAsDownloaded(@Body() body: { ids: number[] }) {
+    return this.invoicesService.markInvoicesAsDownloaded(body.ids);
+  }
+
   @Delete(':id/soft')
   async softDelete(@Param('id', ParseIntPipe) id: number) {
     return this.invoicesService.softDeleteInvoice(id);

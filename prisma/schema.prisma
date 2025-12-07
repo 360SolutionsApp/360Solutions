@@ -190,10 +190,11 @@ model Invoice {
   totalWithSurchargesCompany Float
   totalWithSurchargesCollab  Float
 
-  status    String   @default("ACTIVE")
-  isDeleted Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status     String   @default("ACTIVE")
+  isDeleted  Boolean  @default(false)
+  isDownload Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Relaciones hijas
   invoiceAssignments InvoiceAssignment[]
