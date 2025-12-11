@@ -63,7 +63,9 @@ export class ZohoMailService {
     const accountId = process.env.ZOHO_ACCOUNT_ID;
     const fromAddress = process.env.ZOHO_FROM_ADDRESS;
 
-    const url = `https://mail.zoho.com/api/accounts/${accountId}/messages`;
+    const baseUrl = this.config.get('ZOHO_API_DOMAIN') || 'https://mail.zoho.com';
+
+    const url = `${baseUrl}/api/accounts/${accountId}/messages`;
     const toAddress = Array.isArray(to) ? to.join(',') : to;
 
     const payload = {
@@ -72,7 +74,7 @@ export class ZohoMailService {
       subject,
       content: html,
       askReceipt: 'yes',
-      mailFormat: 'html',
+      mailFormat: 'html',    
     };
 
     this.logger.log(`📤 Enviando correo a: ${toAddress}`);
