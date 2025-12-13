@@ -102,6 +102,9 @@ export class InvoicesService {
       const workOrder = orderAssign.workOrder;
       if (!workOrder) continue;
 
+      // Obtener la fecha de la factura desde el checkIn
+      const invoiceDate = workOrder.workOrderStartDate;
+
       // obtener el checkIn/checkOut del usuario (podrían ser múltiples, tomamos el primero válido)
       const checkInRecord = workOrder.checkIn?.[0];
       const checkOutRecord = workOrder.checkOut?.[0];
@@ -248,6 +251,8 @@ export class InvoicesService {
           clientId: workOrder.clientId!,
           userId,
           workOrderId: workOrder.id,
+          // Establecer la fecha de la factura explícitamente
+          invoiceDate: invoiceDate,
           clientName: workOrder.clientCompany?.companyName ?? '',
           employerIdentificationNumber: workOrder.clientCompany?.employerIdentificationNumber ?? '',
           workOrderCodePo: workOrder.workOrderCodePo ?? '',
