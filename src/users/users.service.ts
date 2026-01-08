@@ -33,6 +33,8 @@ export class UsersService {
       if (verifyDoc) throw new ConflictException('El documento ya está registrado');
     }
 
+    console.log('createUserDto:', createUserDto);
+
     try {
       // ✅ 3. Crear usuario con su detalle
       const user = await this.prismaService.user.create({
@@ -478,10 +480,10 @@ export class UsersService {
         names: updateUserDto.names,
         lastNames: updateUserDto.lastNames,
         phone: updateUserDto.phone,
-        currentCityId: updateUserDto.currentCityId || null,
+        currentCityId: updateUserDto.currentCityId,
         address: updateUserDto.address,
-        documentTypeId: updateUserDto.documentTypeId || null,
-        documentNumber: updateUserDto.documentNumber || null,
+        documentTypeId: updateUserDto.documentTypeId,
+        documentNumber: updateUserDto.documentNumber,
         birthDate: updateUserDto.birthDate,
       },
     });
