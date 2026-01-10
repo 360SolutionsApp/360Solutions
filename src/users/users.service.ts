@@ -495,7 +495,7 @@ export class UsersService {
 
     if (updateUserDto.address !== null) {
       data.address = updateUserDto.address;
-    }    
+    }
 
     if (updateUserDto.documentTypeId !== null) {
       data.documentTypeId = updateUserDto.documentTypeId;
@@ -503,7 +503,7 @@ export class UsersService {
 
     console.log('tipo de documento', updateUserDto.documentTypeId)
 
-    if (updateUserDto.documentNumber.length !== 0) {
+    if (updateUserDto.documentNumber?.length) {
       data.documentNumber = updateUserDto.documentNumber;
     }
 
