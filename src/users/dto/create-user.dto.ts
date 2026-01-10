@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEmail,
   IsString,
@@ -37,25 +37,30 @@ export class CreateUserDto {
 
   @IsInt()
   @IsOptional()
+  @Transform(({ value }) => (value === null ? undefined : value))
   documentTypeId?: number;
 
   @IsString()
   @MinLength(5)
   @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   documentNumber?: string;
 
   @IsString()
   @MinLength(7)
   @IsOptional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   phone?: string;
 
   @IsOptional()
   @IsInt()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   currentCityId?: number;
 
   @IsOptional()
   @IsString()
   @MinLength(10)
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
   address?: string;
 
   @IsEmail()

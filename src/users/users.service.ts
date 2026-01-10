@@ -469,48 +469,81 @@ export class UsersService {
 
 
   async update(email: string, updateUserDto: UpdateUserDto) {
-    const user = await this.prismaService.user.findUnique({ where: { email } });
-    if (!user) throw new NotFoundException('Usuario no encontrado.');
+    const user = await this.prismaService.user.findUnique({
+      where: { email },
+    });
 
-    console.log('usuario encontrado', user)
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado.');
+    }
+
+    console.log('usuario encontrado', user);
+
+    // ✅ Construir data dinámicamente
+    const data: any = {
+      names: updateUserDto.names,
+      lastNames: updateUserDto.lastNames,
+    };
+
+    if (updateUserDto.phone !== null) {
+      data.phone = updateUserDto.phone;
+    }
+
+    if (updateUserDto.currentCityId !== null) {
+      data.currentCityId = updateUserDto.currentCityId;
+    }
+
+    if (updateUserDto.address !== null) {
+      data.address = updateUserDto.address;
+    }    
+
+    if (updateUserDto.documentTypeId !== null) {
+      data.documentTypeId = updateUserDto.documentTypeId;
+    }
+
+    console.log('tipo de documento', updateUserDto.documentTypeId)
+
+    if (updateUserDto.documentNumber.length !== 0) {
+      data.documentNumber = updateUserDto.documentNumber;
+    }
+
+    if (updateUserDto.birthDate !== null) {
+      data.birthDate = updateUserDto.birthDate;
+    }
 
     const updatedUser = await this.prismaService.userDetail.update({
       where: { userId: user.id },
-      data: {
-        names: updateUserDto.names,
-        lastNames: updateUserDto.lastNames,
-        phone: updateUserDto.phone,
-        currentCityId: updateUserDto.currentCityId,
-        address: updateUserDto.address,
-        documentTypeId: updateUserDto.documentTypeId,
-        documentNumber: updateUserDto.documentNumber,
-        birthDate: updateUserDto.birthDate,
-      },
+      data,
     });
 
     console.log('updatedUser:', updatedUser);
 
-    // Reemplazar las asignaciones con costo
-    if (updateUserDto.userCostPerAssignment && updateUserDto.userCostPerAssignment.length > 0) {
+    // ✅ Reemplazar asignaciones con costo SOLO si vienen
+    if (
+      updateUserDto.userCostPerAssignment &&
+      updateUserDto.userCostPerAssignment.length > 0
+    ) {
       await this.prismaService.userCostPerAssignment.deleteMany({
         where: { userDetailId: updatedUser.id },
       });
 
       await Promise.all(
-        updateUserDto.userCostPerAssignment.map(({ assignmentId, costPerHour }) =>
-          this.prismaService.userCostPerAssignment.create({
-            data: {
-              userDetailId: updatedUser.id,
-              assignmentId,
-              costPerHour,
-            },
-          })
+        updateUserDto.userCostPerAssignment.map(
+          ({ assignmentId, costPerHour }) =>
+            this.prismaService.userCostPerAssignment.create({
+              data: {
+                userDetailId: updatedUser.id,
+                assignmentId,
+                costPerHour,
+              },
+            })
         )
       );
     }
 
     return updatedUser;
   }
+
 
   async updateUserStatus(email: string, isActive: boolean) {
     const user = await this.prismaService.user.findUnique({ where: { email } });
