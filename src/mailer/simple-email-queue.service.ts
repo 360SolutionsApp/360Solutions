@@ -8,22 +8,77 @@ export class SimpleEmailQueueService {
     private readonly logger = new Logger(SimpleEmailQueueService.name);
     private queue: Array<{ data: any, retries: number }> = [];
     private isProcessing = false;
-    private lastSentTime = 0;
-    private readonly INTERVAL_MS = 45000; // 45 segundos para ser seguro
+    private sentInWindow = 0;
+    private windowStart = Date.now();
+    private readonly MAX_PER_MINUTE = 5;
+    private readonly MAX_QUEUE_SIZE = 100;
+    private readonly MAX_RETRIES = 1;
+    private consecutiveFailures = 0;
+    private readonly MAX_FAILURES = 5;
+    private readonly COOLDOWN_TIME = 300000; // 5 minutos
+    private recentRecipients = new Map<string, number>();
+    private readonly DUPLICATE_WINDOW = 60000; // 1 minuto
 
     constructor(private readonly zohoMailService: ZohoMailService) {
         // Iniciar el procesador automáticamente
         this.startQueueProcessor();
     }
 
+    private isHardBounce(error: any): boolean {
+        const message =
+            error?.response?.data?.status?.description ||
+            error?.response?.data?.data?.[0]?.message ||
+            error?.message ||
+            '';
+
+        const hardBouncePatterns = [
+            '5.1.1', // user does not exist
+            '5.1.8', // sender blocked
+            '5.7.1', // rejected as spam
+            'Sender Address Blocked',
+            'does not exist'
+        ];
+
+        return hardBouncePatterns.some(pattern =>
+            message.includes(pattern),
+        );
+    }
+
     /**
      * Agrega un correo a la cola y retorna inmediatamente
      */
     async addToQueue(emailData: { to: string | string[]; subject: string; html: string }): Promise<void> {
+
+        if (this.queue.length >= this.MAX_QUEUE_SIZE) {
+            this.logger.warn(`⚠️ Cola llena. Se descarta correo para: ${emailData.to}`);
+            return; // No lanzas error al cliente
+        }
+
+        const now = Date.now();
+
+        // LIMPIEZA DEL MAP (anti memory growth)
+        for (const [key, value] of this.recentRecipients.entries()) {
+            if (now - value > this.DUPLICATE_WINDOW) {
+                this.recentRecipients.delete(key);
+            }
+        }
+
+        const recipient = Array.isArray(emailData.to)
+            ? emailData.to.join(',')
+            : emailData.to;
+
+        const lastSent = this.recentRecipients.get(recipient);
+
+        if (lastSent && now - lastSent < this.DUPLICATE_WINDOW) {
+            this.logger.warn(`⚠️ Envío duplicado detectado para ${recipient}. Ignorado.`);
+            return;
+        }
+
+        this.recentRecipients.set(recipient, now);
+
         this.queue.push({ data: emailData, retries: 0 });
         this.logger.log(`📨 Correo agregado a cola para: ${emailData.to}`);
 
-        // Iniciar procesamiento si no está activo
         if (!this.isProcessing) {
             this.processQueue();
         }
@@ -50,14 +105,32 @@ export class SimpleEmailQueueService {
 
                     // Éxito: remover de la cola
                     this.queue.shift();
+                    this.consecutiveFailures = 0;
                     this.logger.log(`✅ Correo enviado exitosamente`);
 
                 } catch (error) {
                     // Manejar error
                     this.logger.error(`❌ Error al enviar correo a ${item.data.to}: ${error.message}`);
-                    if (item.retries < 2) { // Máximo 3 intentos (0, 1, 2)
+
+                    this.consecutiveFailures++;
+
+                    if (this.consecutiveFailures >= this.MAX_FAILURES) {
+                        this.logger.error('🛑 Demasiados fallos consecutivos. Pausando envío por 5 minutos...');
+                        await new Promise(resolve => setTimeout(resolve, this.COOLDOWN_TIME));
+                        this.consecutiveFailures = 0;
+                    }
+
+                    const isHard = this.isHardBounce(error);
+
+                    if (isHard) {
+                        this.logger.error(`🚫 Hard bounce detectado. No se reintentará: ${item.data.to}`);
+                        this.queue.shift();
+                        continue;
+                    }
+
+                    if (item.retries < this.MAX_RETRIES) {
                         item.retries++;
-                        this.logger.warn(`🔄 Reintento ${item.retries}/3 en 2 minutos para: ${item.data.to}`);
+                        this.logger.warn(`🔄 Reintento ${item.retries}/${this.MAX_RETRIES} para: ${item.data.to}`);
 
                         // Mover al final de la cola para reintentar después
                         this.queue.shift();
@@ -68,7 +141,7 @@ export class SimpleEmailQueueService {
 
                     } else {
                         // Máximo de intentos alcanzado
-                        this.logger.error(`❌ Correo fallado después de 3 intentos: ${item.data.to}`);
+                        this.logger.error(`❌ Correo fallado definitivamente: ${item.data.to}`);
                         this.queue.shift(); // Remover de la cola
                     }
                 }
@@ -80,14 +153,21 @@ export class SimpleEmailQueueService {
 
     private async waitForInterval(): Promise<void> {
         const now = Date.now();
-        const timeSinceLastSent = now - this.lastSentTime;
 
-        if (timeSinceLastSent < this.INTERVAL_MS) {
-            const waitTime = this.INTERVAL_MS - timeSinceLastSent;
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+        if (now - this.windowStart > 60000) {
+            this.windowStart = now;
+            this.sentInWindow = 0;
         }
 
-        this.lastSentTime = Date.now();
+        if (this.sentInWindow >= this.MAX_PER_MINUTE) {
+            const waitTime = 60000 - (now - this.windowStart);
+            this.logger.warn(`⏳ Límite alcanzado. Esperando ${waitTime} ms`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            this.windowStart = Date.now();
+            this.sentInWindow = 0;
+        }
+
+        this.sentInWindow++;
     }
 
     private async startQueueProcessor() {
