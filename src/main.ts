@@ -22,6 +22,7 @@ async function bootstrap() {
       'https://360-solution-front.vercel.app',
       'https://d2eht8a1j5jyx5.cloudfront.net',
       'https://d2eht8a1j5jyx5.cloudfront.net/login?returnUrl=%2Flayout%2Fdashboard',
+      'http://bs-local.com:4200',
     ], // O usa '*' para desarrollo (no recomendado para producción)
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
