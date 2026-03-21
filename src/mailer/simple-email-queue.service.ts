@@ -10,8 +10,8 @@ export class SimpleEmailQueueService {
     private isProcessing = false;
     private sentInWindow = 0;
     private windowStart = Date.now();
-    private readonly MAX_PER_MINUTE = 5;
-    private readonly MAX_QUEUE_SIZE = 100;
+    private readonly MAX_PER_MINUTE = 2;
+    private readonly MAX_QUEUE_SIZE = 300;
     private readonly MAX_RETRIES = 1;
     private consecutiveFailures = 0;
     private readonly MAX_FAILURES = 5;
@@ -26,21 +26,21 @@ export class SimpleEmailQueueService {
 
     private isHardBounce(error: any): boolean {
         const message =
-            error?.response?.data?.status?.description ||
-            error?.response?.data?.data?.[0]?.message ||
+            error?.response?.data?.error?.message ||
+            error?.response?.data?.message ||
             error?.message ||
             '';
 
         const hardBouncePatterns = [
-            '5.1.1', // user does not exist
-            '5.1.8', // sender blocked
-            '5.7.1', // rejected as spam
-            'Sender Address Blocked',
-            'does not exist'
+            'invalid',
+            'does not exist',
+            'NoSuchUser',
+            '5.1.1',
+            'Recipient address rejected',
         ];
 
         return hardBouncePatterns.some(pattern =>
-            message.includes(pattern),
+            message.toLowerCase().includes(pattern.toLowerCase()),
         );
     }
 
@@ -105,14 +105,53 @@ export class SimpleEmailQueueService {
 
                     // Éxito: remover de la cola
                     this.queue.shift();
-                    this.consecutiveFailures = 0;
+                    this.consecutiveFailures = 0;                    
+
+                    this.sentInWindow = Math.max(0, this.sentInWindow - 1);
                     this.logger.log(`✅ Correo enviado exitosamente`);
 
                 } catch (error) {
                     // Manejar error
-                    this.logger.error(`❌ Error al enviar correo a ${item.data.to}: ${error.message}`);
+                    //this.logger.error(`❌ Error al enviar correo a ${item.data.to}: ${error.message}`);
+                    const errorMsg = error?.message || JSON.stringify(error);
+                    this.logger.error(`❌ Error al enviar correo a ${item.data.to}: ${errorMsg}`);
 
-                    this.consecutiveFailures++;
+                    const errorMessage = (error.message || '').toLowerCase();
+
+                    // 🌐 errores de red
+                    if (
+                        errorMessage.includes('timeout') ||
+                        errorMessage.includes('network') ||
+                        errorMessage.includes('socket') ||
+                        errorMessage.includes('econnreset')
+                    ) {
+                        this.logger.warn('🌐 Error de red detectado, reintentando sin penalizar fuerte');
+                        item.retries = 0;
+                    } else {
+                        // 🔥 SOLO contar fallos reales
+                        this.consecutiveFailures++;
+                    }
+
+                    const isBlocked =
+                        errorMessage.includes('limit') ||
+                        errorMessage.includes('blocked') ||
+                        errorMessage.includes('rate') ||
+                        errorMessage.includes('too many') ||
+                        errorMessage.includes('throttled');
+
+                    if (isBlocked) {
+                        this.logger.error('🚫 Bloqueo detectado. Pausando TODA la cola 10 minutos...');
+
+                        await new Promise(resolve => setTimeout(resolve, 600000));
+
+                        this.consecutiveFailures = 0;
+
+                        // 🔥 reset rate limiter completamente
+                        this.windowStart = Date.now();
+                        this.sentInWindow = 0;
+
+                        continue;
+                    }
 
                     if (this.consecutiveFailures >= this.MAX_FAILURES) {
                         this.logger.error('🛑 Demasiados fallos consecutivos. Pausando envío por 5 minutos...');
@@ -137,7 +176,9 @@ export class SimpleEmailQueueService {
                         this.queue.push(item);
 
                         // Esperar 2 minutos antes de continuar
-                        await new Promise(resolve => setTimeout(resolve, 120000));
+                        //await new Promise(resolve => setTimeout(resolve, 120000));
+                        const backoffTime = 60000 * item.retries; // 1 min, luego 2 min
+                        await new Promise(resolve => setTimeout(resolve, backoffTime));
 
                     } else {
                         // Máximo de intentos alcanzado
@@ -168,6 +209,8 @@ export class SimpleEmailQueueService {
         }
 
         this.sentInWindow++;
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     private async startQueueProcessor() {
